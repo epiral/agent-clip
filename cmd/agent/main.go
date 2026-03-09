@@ -48,7 +48,6 @@ func buildRegistry(db *sql.DB, cfg *internal.Config) *internal.Registry {
 	return registry
 }
 
-
 func sendCmd() *cobra.Command {
 	var payload, topicID, runID string
 	var async bool
@@ -143,33 +142,32 @@ func runSync(db *sql.DB, topicID, message string, out internal.Output) error {
 		return err
 	}
 
-	history, err := internal.LoadMessages(db, topicID)
+	run, err := internal.CreateRun(db, topicID, os.Getpid(), false)
 	if err != nil {
 		return err
 	}
 
-	run, err := internal.CreateRun(db, topicID, os.Getpid(), false)
+	ctx, err := internal.BuildContext(db, cfg, topicID, message)
 	if err != nil {
+		_ = internal.FinishRun(db, run.ID, "error")
 		return err
 	}
 
 	registry := buildRegistry(db, cfg)
 	rc := &internal.RunContext{DB: db, RunID: run.ID}
 
-	newMsgs, err := internal.RunLoop(cfg, history, message, registry, out, rc)
+	newMsgs, err := internal.RunLoop(cfg, ctx, registry, out, rc)
 	if err != nil {
 		_ = internal.FinishRun(db, run.ID, "error")
 		return err
 	}
 
-	if err := internal.SaveMessages(db, topicID, newMsgs); err != nil {
+	if err := internal.SaveMessages(db, topicID, run.ID, newMsgs); err != nil {
 		_ = internal.FinishRun(db, run.ID, "error")
 		return err
 	}
 
-	// process memory asynchronously
-	internal.ProcessMemory(db, cfg, topicID, newMsgs)
-
+	internal.ProcessMemory(db, cfg, topicID, run.ID, newMsgs)
 	return nil
 }
 
@@ -228,7 +226,7 @@ func workerCmd() *cobra.Command {
 
 			db.Exec("UPDATE runs SET pid = ? WHERE id = ?", os.Getpid(), runID)
 
-			history, err := internal.LoadMessages(db, topicID)
+			ctx, err := internal.BuildContext(db, cfg, topicID, message)
 			if err != nil {
 				_ = internal.FinishRun(db, runID, "error")
 				return err
@@ -238,21 +236,19 @@ func workerCmd() *cobra.Command {
 			out := internal.AsyncFileOutput(runID)
 			rc := &internal.RunContext{DB: db, RunID: runID}
 
-			newMsgs, err := internal.RunLoop(cfg, history, message, registry, out, rc)
+			newMsgs, err := internal.RunLoop(cfg, ctx, registry, out, rc)
 			if err != nil {
 				out.Info(fmt.Sprintf("[error] %v", err))
 				_ = internal.FinishRun(db, runID, "error")
 				return err
 			}
 
-			if err := internal.SaveMessages(db, topicID, newMsgs); err != nil {
+			if err := internal.SaveMessages(db, topicID, runID, newMsgs); err != nil {
 				_ = internal.FinishRun(db, runID, "error")
 				return err
 			}
 
-			// process memory (sync in worker since it's already background)
-			internal.ProcessMemory(db, cfg, topicID, newMsgs)
-
+			internal.ProcessMemory(db, cfg, topicID, runID, newMsgs)
 			return nil
 		},
 	}

@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS topics (
 CREATE TABLE IF NOT EXISTS messages (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     topic_id     TEXT NOT NULL REFERENCES topics(id),
+    run_id       TEXT,
     role         TEXT NOT NULL,
     content      TEXT,
     tool_calls   TEXT,
@@ -15,6 +16,7 @@ CREATE TABLE IF NOT EXISTS messages (
 );
 
 CREATE INDEX IF NOT EXISTS idx_messages_topic ON messages(topic_id, id);
+CREATE INDEX IF NOT EXISTS idx_messages_run ON messages(run_id);
 
 CREATE TABLE IF NOT EXISTS runs (
     id          TEXT PRIMARY KEY,
@@ -34,17 +36,16 @@ CREATE TABLE IF NOT EXISTS run_inbox (
     message TEXT NOT NULL
 );
 
--- Memory: conversation summaries with embeddings
 CREATE TABLE IF NOT EXISTS summaries (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     topic_id      TEXT NOT NULL REFERENCES topics(id),
+    run_id        TEXT,
     summary       TEXT NOT NULL,
     user_message  TEXT NOT NULL,
     embedding     BLOB,
     created_at    INTEGER NOT NULL
 );
 
--- FTS5 for keyword search fallback
 CREATE VIRTUAL TABLE IF NOT EXISTS summaries_fts USING fts5(
     summary, user_message,
     content='summaries',
@@ -55,7 +56,6 @@ CREATE TRIGGER IF NOT EXISTS summaries_ai AFTER INSERT ON summaries BEGIN
     INSERT INTO summaries_fts(rowid, summary, user_message) VALUES (new.id, new.summary, new.user_message);
 END;
 
--- Memory: user facts (persistent knowledge)
 CREATE TABLE IF NOT EXISTS facts (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     content    TEXT NOT NULL,

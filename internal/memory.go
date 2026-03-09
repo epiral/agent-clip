@@ -19,13 +19,13 @@ type Summary struct {
 	CreatedAt   int64   `json:"created_at"`
 }
 
-func StoreSummary(db *sql.DB, topicID, summary, userMessage string, embedding []float32) error {
+func StoreSummary(db *sql.DB, topicID, runID, summary, userMessage string, embedding []float32) error {
 	var embBlob []byte
 	if len(embedding) > 0 {
 		embBlob = EncodeEmbedding(embedding)
 	}
-	_, err := db.Exec(`INSERT INTO summaries (topic_id, summary, user_message, embedding, created_at) VALUES (?, ?, ?, ?, ?)`,
-		topicID, summary, userMessage, embBlob, time.Now().Unix())
+	_, err := db.Exec(`INSERT INTO summaries (topic_id, run_id, summary, user_message, embedding, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+		topicID, runID, summary, userMessage, embBlob, time.Now().Unix())
 	return err
 }
 
@@ -42,7 +42,6 @@ func GetRecentSummaries(db *sql.DB, limit int) ([]string, error) {
 		rows.Scan(&s)
 		summaries = append(summaries, s)
 	}
-	// reverse to chronological order
 	for i, j := 0, len(summaries)-1; i < j; i, j = i+1, j-1 {
 		summaries[i], summaries[j] = summaries[j], summaries[i]
 	}
@@ -120,7 +119,6 @@ func SearchMemoryKeyword(db *sql.DB, query string, limit int) ([]Summary, error)
 
 // --- Summary generation ---
 
-// renderTrajectory formats a Run's messages into readable text for the summary LLM.
 func renderTrajectory(msgs []Message) string {
 	var b strings.Builder
 	for _, m := range msgs {
@@ -155,14 +153,12 @@ func renderTrajectory(msgs []Message) string {
 	return b.String()
 }
 
-// GenerateSummary creates a summary of a complete Run trajectory with recent context.
 func GenerateSummary(db *sql.DB, cfg *Config, newMsgs []Message) (string, error) {
 	trajectory := renderTrajectory(newMsgs)
 	if len(trajectory) > 6000 {
 		trajectory = trajectory[:6000] + "\n... (truncated)"
 	}
 
-	// get recent summaries for context
 	var contextSection string
 	recentSummaries, _ := GetRecentSummaries(db, 5)
 	if len(recentSummaries) > 0 {
@@ -185,7 +181,6 @@ func GenerateSummary(db *sql.DB, cfg *Config, newMsgs []Message) (string, error)
 
 	resp, err := CallLLM(cfg, messages, nil, nil)
 	if err != nil {
-		// fallback: first user message
 		for _, m := range newMsgs {
 			if m.Role == "user" && m.Content != nil {
 				text := *m.Content
@@ -242,56 +237,8 @@ func DeleteFact(db *sql.DB, id int) error {
 	return err
 }
 
-// --- Memory context for system prompt ---
-
-func BuildMemoryContext(db *sql.DB, cfg *Config, userMessage string) string {
-	var parts []string
-
-	// facts
-	facts, _ := ListFacts(db)
-	if len(facts) > 0 {
-		var fb strings.Builder
-		fb.WriteString("## Known Facts\n")
-		for _, f := range facts {
-			fmt.Fprintf(&fb, "- [%s] %s\n", f.Category, f.Content)
-		}
-		parts = append(parts, fb.String())
-	}
-
-	// recent summaries
-	recentSummaries, _ := GetRecentSummaries(db, 5)
-	if len(recentSummaries) > 0 {
-		var rb strings.Builder
-		rb.WriteString("## Recent Conversations\n")
-		for _, s := range recentSummaries {
-			fmt.Fprintf(&rb, "- %s\n", s)
-		}
-		parts = append(parts, rb.String())
-	}
-
-	// semantic search
-	queryEmb, err := GetEmbedding(cfg, userMessage)
-	if err == nil && len(queryEmb) > 0 {
-		results, err := SearchMemorySemantic(db, queryEmb, 3)
-		if err == nil && len(results) > 0 {
-			var sb strings.Builder
-			sb.WriteString("## Relevant Past Conversations\n")
-			for _, r := range results {
-				fmt.Fprintf(&sb, "- (%.0f%% match) %s\n", r.Similarity*100, r.SummaryText)
-			}
-			parts = append(parts, sb.String())
-		}
-	}
-
-	if len(parts) == 0 {
-		return ""
-	}
-	return "\n\n" + strings.Join(parts, "\n") + "\n"
-}
-
 // ProcessMemory generates summary and embedding for a completed Run.
-func ProcessMemory(db *sql.DB, cfg *Config, topicID string, newMsgs []Message) {
-	// extract first user message for storage
+func ProcessMemory(db *sql.DB, cfg *Config, topicID, runID string, newMsgs []Message) {
 	var userMessage string
 	for _, m := range newMsgs {
 		if m.Role == "user" && m.Content != nil {
@@ -306,5 +253,5 @@ func ProcessMemory(db *sql.DB, cfg *Config, topicID string, newMsgs []Message) {
 	}
 
 	embedding, _ := GetEmbedding(cfg, summary)
-	StoreSummary(db, topicID, summary, userMessage, embedding)
+	StoreSummary(db, topicID, runID, summary, userMessage, embedding)
 }

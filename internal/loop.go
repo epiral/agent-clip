@@ -14,22 +14,15 @@ type RunContext struct {
 }
 
 // RunLoop executes the agentic loop.
-func RunLoop(cfg *Config, history []Message, userMessage string, registry *Registry, out Output, rc *RunContext) ([]Message, error) {
-	// build system prompt with memory context
-	systemPrompt := cfg.SystemPrompt
-	if rc != nil && rc.DB != nil {
-		memoryCtx := BuildMemoryContext(rc.DB, cfg, userMessage)
-		if memoryCtx != "" {
-			systemPrompt += memoryCtx
-		}
-	}
+// contextResult comes from BuildContext (pre-assembled system prompt + messages).
+func RunLoop(cfg *Config, ctx *ContextResult, registry *Registry, out Output, rc *RunContext) ([]Message, error) {
+	context := []Message{TextMessage("system", ctx.SystemPrompt)}
+	context = append(context, ctx.Messages...)
 
-	context := []Message{TextMessage("system", systemPrompt)}
-	context = append(context, history...)
-
-	userMsg := TextMessage("user", userMessage)
-	context = append(context, userMsg)
-	newMsgs := []Message{userMsg}
+	// newMsgs tracks messages generated in THIS Run (for saving)
+	// the last message in ctx.Messages is the new user message
+	lastMsg := ctx.Messages[len(ctx.Messages)-1]
+	newMsgs := []Message{lastMsg}
 
 	tools := []ToolDef{RunToolDef(registry.Help())}
 
@@ -39,7 +32,7 @@ func RunLoop(cfg *Config, history []Message, userMessage string, registry *Regis
 			if injected, _ := DrainInbox(rc.DB, rc.RunID); len(injected) > 0 {
 				for _, msg := range injected {
 					out.Inject(msg)
-					injectMsg := TextMessage("user", msg)
+					injectMsg := TextMessage("user", fmt.Sprintf("<user>\n%s\n</user>", msg))
 					context = append(context, injectMsg)
 					newMsgs = append(newMsgs, injectMsg)
 				}
@@ -86,7 +79,7 @@ func RunLoop(cfg *Config, history []Message, userMessage string, registry *Regis
 				context = append(context, TextMessage("assistant", assistantText))
 				for _, msg := range injected {
 					out.Inject(msg)
-					injectMsg := TextMessage("user", msg)
+					injectMsg := TextMessage("user", fmt.Sprintf("<user>\n%s\n</user>", msg))
 					context = append(context, injectMsg)
 					newMsgs = append(newMsgs, injectMsg)
 				}

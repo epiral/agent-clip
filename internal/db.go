@@ -21,11 +21,9 @@ func OpenDB() (*sql.DB, error) {
 		return nil, fmt.Errorf("open db: %w", err)
 	}
 
-	// run schema
 	schemaPath := filepath.Join(base, "seed", "schema.sql")
 	schema, err := os.ReadFile(schemaPath)
 	if err != nil {
-		// fallback: try data/schema.sql for installed instances
 		schemaPath = filepath.Join(base, "data", "schema.sql")
 		schema, err = os.ReadFile(schemaPath)
 		if err != nil {
@@ -38,6 +36,10 @@ func OpenDB() (*sql.DB, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("init schema: %w", err)
 	}
+
+	// migrate: add run_id column if missing
+	db.Exec("ALTER TABLE messages ADD COLUMN run_id TEXT")
+	db.Exec("ALTER TABLE summaries ADD COLUMN run_id TEXT")
 
 	return db, nil
 }
@@ -106,7 +108,54 @@ func LoadMessages(db *sql.DB, topicID string) ([]Message, error) {
 		return nil, fmt.Errorf("load messages: %w", err)
 	}
 	defer rows.Close()
+	return scanMessages(rows)
+}
 
+func SaveMessages(db *sql.DB, topicID, runID string, msgs []Message) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.Prepare(`
+		INSERT INTO messages (topic_id, run_id, role, content, tool_calls, tool_call_id, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return fmt.Errorf("prepare insert: %w", err)
+	}
+	defer stmt.Close()
+
+	now := time.Now().Unix()
+	for _, msg := range msgs {
+		var content sql.NullString
+		if msg.Content != nil {
+			content = sql.NullString{String: *msg.Content, Valid: true}
+		}
+
+		var toolCallsRaw sql.NullString
+		if len(msg.ToolCalls) > 0 {
+			b, err := json.Marshal(msg.ToolCalls)
+			if err != nil {
+				return fmt.Errorf("marshal tool_calls: %w", err)
+			}
+			toolCallsRaw = sql.NullString{String: string(b), Valid: true}
+		}
+
+		var toolCallID sql.NullString
+		if msg.ToolCallID != "" {
+			toolCallID = sql.NullString{String: msg.ToolCallID, Valid: true}
+		}
+
+		if _, err := stmt.Exec(topicID, runID, msg.Role, content, toolCallsRaw, toolCallID, now); err != nil {
+			return fmt.Errorf("insert message: %w", err)
+		}
+	}
+
+	return tx.Commit()
+}
+
+func scanMessages(rows *sql.Rows) ([]Message, error) {
 	var msgs []Message
 	for rows.Next() {
 		var (
@@ -134,48 +183,4 @@ func LoadMessages(db *sql.DB, topicID string) ([]Message, error) {
 		msgs = append(msgs, msg)
 	}
 	return msgs, rows.Err()
-}
-
-func SaveMessages(db *sql.DB, topicID string, msgs []Message) error {
-	tx, err := db.Begin()
-	if err != nil {
-		return fmt.Errorf("begin tx: %w", err)
-	}
-	defer tx.Rollback()
-
-	stmt, err := tx.Prepare(`
-		INSERT INTO messages (topic_id, role, content, tool_calls, tool_call_id, created_at)
-		VALUES (?, ?, ?, ?, ?, ?)`)
-	if err != nil {
-		return fmt.Errorf("prepare insert: %w", err)
-	}
-	defer stmt.Close()
-
-	now := time.Now().Unix()
-	for _, msg := range msgs {
-		var content sql.NullString
-		if msg.Content != nil {
-			content = sql.NullString{String: *msg.Content, Valid: true}
-		}
-
-		var toolCallsRaw sql.NullString
-		if len(msg.ToolCalls) > 0 {
-			b, err := json.Marshal(msg.ToolCalls)
-			if err != nil {
-				return fmt.Errorf("marshal tool_calls: %w", err)
-			}
-			toolCallsRaw = sql.NullString{String: string(b), Valid: true}
-		}
-
-		var toolCallID sql.NullString
-		if msg.ToolCallID != "" {
-			toolCallID = sql.NullString{String: msg.ToolCallID, Valid: true}
-		}
-
-		if _, err := stmt.Exec(topicID, msg.Role, content, toolCallsRaw, toolCallID, now); err != nil {
-			return fmt.Errorf("insert message: %w", err)
-		}
-	}
-
-	return tx.Commit()
 }
