@@ -65,9 +65,39 @@ func (r *Registry) Help() map[string]string {
 }
 
 func (r *Registry) Exec(command, stdin string) string {
+	segments := ParseChain(command)
+	if len(segments) == 0 {
+		return "[error] empty command"
+	}
+
+	var lastOutput string
+	var lastErr bool
+	pipeInput := stdin
+
+	for i, seg := range segments {
+		// && semantics: skip if previous failed
+		if i > 0 && segments[i-1].Op == OpAnd && lastErr {
+			break
+		}
+
+		// pipe: previous output becomes stdin
+		segStdin := ""
+		if i == 0 {
+			segStdin = pipeInput
+		} else if segments[i-1].Op == OpPipe {
+			segStdin = lastOutput
+		}
+
+		lastOutput, lastErr = r.execSingle(seg.Raw, segStdin)
+	}
+
+	return lastOutput
+}
+
+func (r *Registry) execSingle(command, stdin string) (string, bool) {
 	parts := strings.Fields(command)
 	if len(parts) == 0 {
-		return "[error] empty command"
+		return "[error] empty command", true
 	}
 
 	name := parts[0]
@@ -79,14 +109,14 @@ func (r *Registry) Exec(command, stdin string) string {
 		for n := range r.handlers {
 			available = append(available, n)
 		}
-		return fmt.Sprintf("[error] unknown command: %s\nAvailable: %s", name, strings.Join(available, ", "))
+		return fmt.Sprintf("[error] unknown command: %s\nAvailable: %s", name, strings.Join(available, ", ")), true
 	}
 
 	out, err := handler(args, stdin)
 	if err != nil {
-		return fmt.Sprintf("[error] %s: %v", name, err)
+		return fmt.Sprintf("[error] %s: %v", name, err), true
 	}
-	return out
+	return out, false
 }
 
 func (r *Registry) registerBuiltins() {
@@ -107,6 +137,109 @@ func (r *Registry) registerBuiltins() {
 			fmt.Fprintf(&b, "  %s — %s\n", name, desc)
 		}
 		return b.String(), nil
+	})
+
+	r.Register("grep", "Filter lines matching a pattern (supports -i, -v, -c)", func(args []string, stdin string) (string, error) {
+		if len(args) == 0 {
+			return "", fmt.Errorf("usage: grep [-i] [-v] [-c] <pattern>")
+		}
+		ignoreCase := false
+		invert := false
+		countOnly := false
+		var pattern string
+		for _, a := range args {
+			switch a {
+			case "-i":
+				ignoreCase = true
+			case "-v":
+				invert = true
+			case "-c":
+				countOnly = true
+			default:
+				pattern = a
+			}
+		}
+		if pattern == "" {
+			return "", fmt.Errorf("pattern required")
+		}
+		if ignoreCase {
+			pattern = strings.ToLower(pattern)
+		}
+
+		lines := strings.Split(stdin, "\n")
+		var matched []string
+		for _, line := range lines {
+			haystack := line
+			if ignoreCase {
+				haystack = strings.ToLower(line)
+			}
+			match := strings.Contains(haystack, pattern)
+			if invert {
+				match = !match
+			}
+			if match {
+				matched = append(matched, line)
+			}
+		}
+		if countOnly {
+			return fmt.Sprintf("%d", len(matched)), nil
+		}
+		return strings.Join(matched, "\n"), nil
+	})
+
+	r.Register("head", "Show first N lines (default 10). Usage: head 5 or head -n 5", func(args []string, stdin string) (string, error) {
+		n := 10
+		for i, a := range args {
+			if a == "-n" && i+1 < len(args) {
+				fmt.Sscanf(args[i+1], "%d", &n)
+			} else {
+				cleaned := strings.TrimLeft(a, "-")
+				if v, err := strconv.Atoi(cleaned); err == nil && v > 0 {
+					n = v
+				}
+			}
+		}
+		lines := strings.Split(stdin, "\n")
+		if n > 0 && len(lines) > n {
+			lines = lines[:n]
+		}
+		return strings.Join(lines, "\n"), nil
+	})
+
+	r.Register("tail", "Show last N lines (default 10). Usage: tail 5 or tail -n 5", func(args []string, stdin string) (string, error) {
+		n := 10
+		for i, a := range args {
+			if a == "-n" && i+1 < len(args) {
+				fmt.Sscanf(args[i+1], "%d", &n)
+			} else {
+				cleaned := strings.TrimLeft(a, "-")
+				if v, err := strconv.Atoi(cleaned); err == nil && v > 0 {
+					n = v
+				}
+			}
+		}
+		lines := strings.Split(stdin, "\n")
+		if n > 0 && len(lines) > n {
+			lines = lines[len(lines)-n:]
+		}
+		return strings.Join(lines, "\n"), nil
+	})
+
+	r.Register("wc", "Count lines, words, chars (-l lines, -w words, -c chars)", func(args []string, stdin string) (string, error) {
+		lines := len(strings.Split(stdin, "\n"))
+		words := len(strings.Fields(stdin))
+		chars := len(stdin)
+		if len(args) > 0 {
+			switch args[0] {
+			case "-l":
+				return fmt.Sprintf("%d", lines), nil
+			case "-w":
+				return fmt.Sprintf("%d", words), nil
+			case "-c":
+				return fmt.Sprintf("%d", chars), nil
+			}
+		}
+		return fmt.Sprintf("%d lines, %d words, %d chars", lines, words, chars), nil
 	})
 }
 
