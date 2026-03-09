@@ -29,6 +29,26 @@ func StoreSummary(db *sql.DB, topicID, summary, userMessage string, embedding []
 	return err
 }
 
+func GetRecentSummaries(db *sql.DB, limit int) ([]string, error) {
+	rows, err := db.Query(`SELECT summary FROM summaries ORDER BY created_at DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var summaries []string
+	for rows.Next() {
+		var s string
+		rows.Scan(&s)
+		summaries = append(summaries, s)
+	}
+	// reverse to chronological order
+	for i, j := 0, len(summaries)-1; i < j; i, j = i+1, j-1 {
+		summaries[i], summaries[j] = summaries[j], summaries[i]
+	}
+	return summaries, nil
+}
+
 // --- Search ---
 
 func SearchMemorySemantic(db *sql.DB, queryEmbedding []float32, limit int) ([]Summary, error) {
@@ -54,7 +74,7 @@ func SearchMemorySemantic(db *sql.DB, queryEmbedding []float32, limit int) ([]Su
 			continue
 		}
 		sim := CosineSimilarity(queryEmbedding, DecodeEmbedding(embBlob))
-		if sim >= 0.5 { // relevance threshold
+		if sim >= 0.5 {
 			results = append(results, scored{s, sim})
 		}
 	}
@@ -100,24 +120,82 @@ func SearchMemoryKeyword(db *sql.DB, query string, limit int) ([]Summary, error)
 
 // --- Summary generation ---
 
-func GenerateSummary(cfg *Config, userMessage, assistantReply string) (string, error) {
-	reply := assistantReply
-	if len(reply) > 2000 {
-		reply = reply[:2000] + "..."
+// renderTrajectory formats a Run's messages into readable text for the summary LLM.
+func renderTrajectory(msgs []Message) string {
+	var b strings.Builder
+	for _, m := range msgs {
+		switch m.Role {
+		case "user":
+			if m.Content != nil {
+				fmt.Fprintf(&b, "[user] %s\n", *m.Content)
+			}
+		case "assistant":
+			if len(m.ToolCalls) > 0 {
+				for _, tc := range m.ToolCalls {
+					fmt.Fprintf(&b, "[tool_call] %s(%s)\n", tc.Function.Name, truncate(tc.Function.Arguments, 200))
+				}
+			}
+			if m.Content != nil && *m.Content != "" {
+				text := *m.Content
+				if len(text) > 1500 {
+					text = text[:1500] + "..."
+				}
+				fmt.Fprintf(&b, "[assistant] %s\n", text)
+			}
+		case "tool":
+			if m.Content != nil {
+				text := *m.Content
+				if len(text) > 500 {
+					text = text[:500] + "..."
+				}
+				fmt.Fprintf(&b, "[tool_result] %s\n", text)
+			}
+		}
+	}
+	return b.String()
+}
+
+// GenerateSummary creates a summary of a complete Run trajectory with recent context.
+func GenerateSummary(db *sql.DB, cfg *Config, newMsgs []Message) (string, error) {
+	trajectory := renderTrajectory(newMsgs)
+	if len(trajectory) > 6000 {
+		trajectory = trajectory[:6000] + "\n... (truncated)"
 	}
 
+	// get recent summaries for context
+	var contextSection string
+	recentSummaries, _ := GetRecentSummaries(db, 5)
+	if len(recentSummaries) > 0 {
+		contextSection = "近期对话摘要（作为上下文）:\n"
+		for _, s := range recentSummaries {
+			contextSection += "- " + s + "\n"
+		}
+		contextSection += "\n"
+	}
+
+	prompt := fmt.Sprintf(`%s请用1-3句话总结以下对话。包含：用户的意图、执行了什么操作、最终结果。
+
+对话轨迹:
+%s`, contextSection, trajectory)
+
 	messages := []Message{
-		TextMessage("system", "You are a summarizer. Output only the summary, nothing else. Use Chinese."),
-		TextMessage("user", fmt.Sprintf("用1-2句话总结这段对话。重点是用户问了什么、结果是什么。\n\n用户: %s\n\n回复: %s", userMessage, reply)),
+		TextMessage("system", "你是一个对话摘要生成器。只输出摘要，不要其他内容。中文输出。"),
+		TextMessage("user", prompt),
 	}
 
 	resp, err := CallLLM(cfg, messages, nil, nil)
 	if err != nil {
-		// fallback: use first 100 chars of user message
-		if len(userMessage) > 100 {
-			return userMessage[:100] + "...", nil
+		// fallback: first user message
+		for _, m := range newMsgs {
+			if m.Role == "user" && m.Content != nil {
+				text := *m.Content
+				if len(text) > 100 {
+					text = text[:100] + "..."
+				}
+				return text, nil
+			}
 		}
-		return userMessage, nil
+		return "", err
 	}
 
 	return strings.TrimSpace(resp.Content), nil
@@ -180,27 +258,18 @@ func BuildMemoryContext(db *sql.DB, cfg *Config, userMessage string) string {
 		parts = append(parts, fb.String())
 	}
 
-	// recent summaries (last 5)
-	rows, err := db.Query(`SELECT summary FROM summaries ORDER BY created_at DESC LIMIT 5`)
-	if err == nil {
-		defer rows.Close()
-		var recents []string
-		for rows.Next() {
-			var s string
-			rows.Scan(&s)
-			recents = append(recents, s)
+	// recent summaries
+	recentSummaries, _ := GetRecentSummaries(db, 5)
+	if len(recentSummaries) > 0 {
+		var rb strings.Builder
+		rb.WriteString("## Recent Conversations\n")
+		for _, s := range recentSummaries {
+			fmt.Fprintf(&rb, "- %s\n", s)
 		}
-		if len(recents) > 0 {
-			var rb strings.Builder
-			rb.WriteString("## Recent Conversations\n")
-			for i := len(recents) - 1; i >= 0; i-- {
-				fmt.Fprintf(&rb, "- %s\n", recents[i])
-			}
-			parts = append(parts, rb.String())
-		}
+		parts = append(parts, rb.String())
 	}
 
-	// semantic search (if we have embeddings)
+	// semantic search
 	queryEmb, err := GetEmbedding(cfg, userMessage)
 	if err == nil && len(queryEmb) > 0 {
 		results, err := SearchMemorySemantic(db, queryEmb, 3)
@@ -220,10 +289,18 @@ func BuildMemoryContext(db *sql.DB, cfg *Config, userMessage string) string {
 	return "\n\n" + strings.Join(parts, "\n") + "\n"
 }
 
-// ProcessMemoryAsync generates summary and embedding for a completed conversation.
-// Called asynchronously after a Run completes.
-func ProcessMemoryAsync(db *sql.DB, cfg *Config, topicID, userMessage, assistantReply string) {
-	summary, _ := GenerateSummary(cfg, userMessage, assistantReply)
+// ProcessMemory generates summary and embedding for a completed Run.
+func ProcessMemory(db *sql.DB, cfg *Config, topicID string, newMsgs []Message) {
+	// extract first user message for storage
+	var userMessage string
+	for _, m := range newMsgs {
+		if m.Role == "user" && m.Content != nil {
+			userMessage = *m.Content
+			break
+		}
+	}
+
+	summary, _ := GenerateSummary(db, cfg, newMsgs)
 	if summary == "" {
 		return
 	}

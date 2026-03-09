@@ -48,15 +48,6 @@ func buildRegistry(db *sql.DB, cfg *internal.Config) *internal.Registry {
 	return registry
 }
 
-// extractReply finds the last assistant text response from newMsgs.
-func extractReply(msgs []internal.Message) string {
-	for i := len(msgs) - 1; i >= 0; i-- {
-		if msgs[i].Role == "assistant" && msgs[i].Content != nil && len(msgs[i].ToolCalls) == 0 {
-			return *msgs[i].Content
-		}
-	}
-	return ""
-}
 
 func sendCmd() *cobra.Command {
 	var payload, topicID, runID string
@@ -177,7 +168,7 @@ func runSync(db *sql.DB, topicID, message string, out internal.Output) error {
 	}
 
 	// process memory asynchronously
-	internal.ProcessMemoryAsync(db, cfg, topicID, message, extractReply(newMsgs))
+	internal.ProcessMemory(db, cfg, topicID, newMsgs)
 
 	return nil
 }
@@ -260,7 +251,7 @@ func workerCmd() *cobra.Command {
 			}
 
 			// process memory (sync in worker since it's already background)
-			internal.ProcessMemoryAsync(db, cfg, topicID, message, extractReply(newMsgs))
+			internal.ProcessMemory(db, cfg, topicID, newMsgs)
 
 			return nil
 		},
