@@ -388,10 +388,11 @@ func memoryFacts(db *sql.DB) (string, error) {
 // RegisterTopicCommands adds topic management commands to the registry.
 func RegisterTopicCommands(r *Registry, db *sql.DB) {
 	r.Register("topic", `Manage conversation topics.
-  topic list                   — list all topics
-  topic info <id>              — show topic details
-  topic rename <id> <new-name> — rename a topic
-  topic current                — show current topic (if in one)`,
+  topic list                       — list all topics
+  topic info <id>                  — show topic details and run history
+  topic runs <id>                  — list runs with summaries
+  topic run <id> <N>               — show run N's full messages
+  topic rename <id> <new-name>     — rename a topic`,
 		func(args []string, stdin string) (string, error) {
 			if len(args) == 0 {
 				return "", fmt.Errorf("usage: topic list|info|rename|current")
@@ -417,11 +418,24 @@ func RegisterTopicCommands(r *Registry, db *sql.DB) {
 				}
 				return fmt.Sprintf("topic %s renamed to %q", args[1], newName), nil
 
-			case "current":
-				return "Use the topic ID from your current conversation context.", nil
+			case "runs":
+				if len(args) < 2 {
+					return "", fmt.Errorf("usage: topic runs <id>")
+				}
+				return topicRuns(db, args[1])
+
+			case "run":
+				if len(args) < 3 {
+					return "", fmt.Errorf("usage: topic run <topic-id> <run-number>")
+				}
+				n, err := strconv.Atoi(args[2])
+				if err != nil {
+					return "", fmt.Errorf("run number must be an integer")
+				}
+				return topicRunDetail(db, args[1], n)
 
 			default:
-				return "", fmt.Errorf("unknown: topic %s. Use: list|info|rename", args[0])
+				return "", fmt.Errorf("unknown: topic %s. Use: list|info|runs|run|rename", args[0])
 			}
 		})
 }
@@ -507,4 +521,88 @@ func getTopicRuns(db *sql.DB, topicID string) ([]topicRunInfo, error) {
 		runs = append(runs, r)
 	}
 	return runs, rows.Err()
+}
+
+func topicRuns(db *sql.DB, topicID string) (string, error) {
+	runs, err := getTopicRuns(db, topicID)
+	if err != nil {
+		return "", err
+	}
+	if len(runs) == 0 {
+		return "No runs in this topic.", nil
+	}
+
+	var b strings.Builder
+	for i, r := range runs {
+		ts := time.Unix(r.StartedAt, 0).Format("15:04:05")
+		duration := ""
+		if r.FinishedAt > 0 {
+			d := time.Duration(r.FinishedAt-r.StartedAt) * time.Second
+			duration = fmt.Sprintf(" (%s)", d)
+		}
+		fmt.Fprintf(&b, "  #%d [%s]%s  status=%s  tools=%d\n", i+1, ts, duration, r.Status, r.ToolCount)
+		if r.Summary != "" {
+			fmt.Fprintf(&b, "     %s\n", r.Summary)
+		}
+	}
+	return b.String(), nil
+}
+
+func topicRunDetail(db *sql.DB, topicID string, runNumber int) (string, error) {
+	runs, err := getTopicRuns(db, topicID)
+	if err != nil {
+		return "", err
+	}
+	if runNumber < 1 || runNumber > len(runs) {
+		return "", fmt.Errorf("run #%d not found (topic has %d runs)", runNumber, len(runs))
+	}
+
+	run := runs[runNumber-1]
+	msgs, err := LoadMessagesByRunID(db, run.ID)
+	if err != nil {
+		return "", err
+	}
+
+	var b strings.Builder
+	ts := time.Unix(run.StartedAt, 0).Format("2006-01-02 15:04:05")
+	fmt.Fprintf(&b, "Run #%d  [%s]  status=%s  tools=%d\n", runNumber, ts, run.Status, run.ToolCount)
+	if run.Summary != "" {
+		fmt.Fprintf(&b, "Summary: %s\n", run.Summary)
+	}
+	fmt.Fprintf(&b, "\nMessages (%d):\n", len(msgs))
+
+	for _, m := range msgs {
+		switch m.Role {
+		case "user":
+			if m.Content != nil {
+				text := *m.Content
+				if len(text) > 300 {
+					text = text[:300] + "..."
+				}
+				fmt.Fprintf(&b, "\n[user] %s\n", text)
+			}
+		case "assistant":
+			if len(m.ToolCalls) > 0 {
+				for _, tc := range m.ToolCalls {
+					fmt.Fprintf(&b, "[tool_call] %s(%s)\n", tc.Function.Name, truncate(tc.Function.Arguments, 100))
+				}
+			}
+			if m.Content != nil && *m.Content != "" {
+				text := *m.Content
+				if len(text) > 500 {
+					text = text[:500] + "..."
+				}
+				fmt.Fprintf(&b, "[assistant] %s\n", text)
+			}
+		case "tool":
+			if m.Content != nil {
+				text := *m.Content
+				if len(text) > 200 {
+					text = text[:200] + "..."
+				}
+				fmt.Fprintf(&b, "[tool_result] %s\n", text)
+			}
+		}
+	}
+	return b.String(), nil
 }
