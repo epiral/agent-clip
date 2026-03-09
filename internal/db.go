@@ -39,6 +39,7 @@ func OpenDB() (*sql.DB, error) {
 
 	// migrate: add columns if missing
 	db.Exec("ALTER TABLE messages ADD COLUMN run_id TEXT")
+	db.Exec("ALTER TABLE messages ADD COLUMN reasoning TEXT")
 	db.Exec("ALTER TABLE summaries ADD COLUMN run_id TEXT")
 	db.Exec("ALTER TABLE summaries ADD COLUMN embedding_model TEXT")
 
@@ -122,7 +123,7 @@ func GetTopic(db *sql.DB, id string) (*Topic, error) {
 
 func LoadMessages(db *sql.DB, topicID string) ([]Message, error) {
 	rows, err := db.Query(`
-		SELECT role, content, tool_calls, tool_call_id
+		SELECT role, content, tool_calls, tool_call_id, reasoning
 		FROM messages
 		WHERE topic_id = ?
 		ORDER BY id ASC`, topicID)
@@ -141,8 +142,8 @@ func SaveMessages(db *sql.DB, topicID, runID string, msgs []Message) error {
 	defer tx.Rollback()
 
 	stmt, err := tx.Prepare(`
-		INSERT INTO messages (topic_id, run_id, role, content, tool_calls, tool_call_id, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`)
+		INSERT INTO messages (topic_id, run_id, role, content, tool_calls, tool_call_id, reasoning, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return fmt.Errorf("prepare insert: %w", err)
 	}
@@ -169,7 +170,12 @@ func SaveMessages(db *sql.DB, topicID, runID string, msgs []Message) error {
 			toolCallID = sql.NullString{String: msg.ToolCallID, Valid: true}
 		}
 
-		if _, err := stmt.Exec(topicID, runID, msg.Role, content, toolCallsRaw, toolCallID, now); err != nil {
+		var reasoning sql.NullString
+		if msg.Reasoning != nil {
+			reasoning = sql.NullString{String: *msg.Reasoning, Valid: true}
+		}
+
+		if _, err := stmt.Exec(topicID, runID, msg.Role, content, toolCallsRaw, toolCallID, reasoning, now); err != nil {
 			return fmt.Errorf("insert message: %w", err)
 		}
 	}
@@ -185,8 +191,9 @@ func scanMessages(rows *sql.Rows) ([]Message, error) {
 			content      sql.NullString
 			toolCallsRaw sql.NullString
 			toolCallID   sql.NullString
+			reasoning    sql.NullString
 		)
-		if err := rows.Scan(&role, &content, &toolCallsRaw, &toolCallID); err != nil {
+		if err := rows.Scan(&role, &content, &toolCallsRaw, &toolCallID, &reasoning); err != nil {
 			return nil, fmt.Errorf("scan message: %w", err)
 		}
 
@@ -201,6 +208,9 @@ func scanMessages(rows *sql.Rows) ([]Message, error) {
 			if err := json.Unmarshal([]byte(toolCallsRaw.String), &msg.ToolCalls); err != nil {
 				return nil, fmt.Errorf("unmarshal tool_calls: %w", err)
 			}
+		}
+		if reasoning.Valid {
+			msg.Reasoning = &reasoning.String
 		}
 		msgs = append(msgs, msg)
 	}

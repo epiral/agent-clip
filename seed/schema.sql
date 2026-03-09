@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS messages (
     content      TEXT,
     tool_calls   TEXT,
     tool_call_id TEXT,
+    reasoning    TEXT,
     created_at   INTEGER NOT NULL
 );
 

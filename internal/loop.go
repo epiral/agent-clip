@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 const maxIterations = 20
@@ -39,11 +40,22 @@ func RunLoop(cfg *Config, ctx *ContextResult, registry *Registry, out Output, rc
 			}
 		}
 
+		thinkingStarted := false
 		resp, err := CallLLM(cfg, context, tools, func(token string) {
 			out.Text(token)
+		}, func(token string) {
+			if !thinkingStarted {
+				out.Thinking("[thinking] ")
+				thinkingStarted = true
+			}
+			out.Thinking(token)
 		})
 		if err != nil {
 			return nil, err
+		}
+
+		if thinkingStarted {
+			out.Thinking("\n")
 		}
 
 		// --- tool_calls ---
@@ -51,6 +63,9 @@ func RunLoop(cfg *Config, ctx *ContextResult, registry *Registry, out Output, rc
 			assistantMsg := Message{Role: "assistant", ToolCalls: resp.ToolCalls}
 			if resp.Content != "" {
 				assistantMsg.Content = &resp.Content
+			}
+			if resp.Reasoning != "" {
+				assistantMsg.Reasoning = &resp.Reasoning
 			}
 			context = append(context, assistantMsg)
 			newMsgs = append(newMsgs, assistantMsg)
@@ -67,7 +82,10 @@ func RunLoop(cfg *Config, ctx *ContextResult, registry *Registry, out Output, rc
 		}
 
 		// --- stop → atomic finish ---
-		assistantText := resp.Content
+		assistantMsg := TextMessage("assistant", resp.Content)
+		if resp.Reasoning != "" {
+			assistantMsg.Reasoning = &resp.Reasoning
+		}
 
 		if rc != nil && rc.DB != nil {
 			injected, err := TryFinishRun(rc.DB, rc.RunID, "done")
@@ -75,8 +93,8 @@ func RunLoop(cfg *Config, ctx *ContextResult, registry *Registry, out Output, rc
 				return nil, fmt.Errorf("finish run: %w", err)
 			}
 			if len(injected) > 0 {
-				newMsgs = append(newMsgs, TextMessage("assistant", assistantText))
-				context = append(context, TextMessage("assistant", assistantText))
+				newMsgs = append(newMsgs, assistantMsg)
+				context = append(context, assistantMsg)
 				for _, msg := range injected {
 					out.Inject(msg)
 					injectMsg := TextMessage("user", fmt.Sprintf("<user>\n%s\n</user>", msg))
@@ -87,7 +105,7 @@ func RunLoop(cfg *Config, ctx *ContextResult, registry *Registry, out Output, rc
 			}
 		}
 
-		newMsgs = append(newMsgs, TextMessage("assistant", assistantText))
+		newMsgs = append(newMsgs, assistantMsg)
 		out.Done()
 		return newMsgs, nil
 	}
@@ -105,13 +123,15 @@ func execToolCall(registry *Registry, tc ToolCall) string {
 	}
 
 	// If LLM uses a command name as the tool name instead of "run",
-	// prepend it to the command string.
+	// prepend it to the command string (avoid double-prefix).
 	if tc.Function.Name != "run" {
-		cmd := tc.Function.Name
-		if args.Command != "" {
-			cmd += " " + args.Command
+		if args.Command == "" || !strings.HasPrefix(args.Command, tc.Function.Name) {
+			cmd := tc.Function.Name
+			if args.Command != "" {
+				cmd += " " + args.Command
+			}
+			args.Command = cmd
 		}
-		args.Command = cmd
 	}
 
 	if args.Command == "" {

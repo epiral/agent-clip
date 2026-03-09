@@ -15,6 +15,7 @@ type Output interface {
 	Result(v any)
 
 	// Streaming (send)
+	Thinking(token string)
 	Text(token string)
 	ToolCall(name, args string)
 	ToolResult(content string)
@@ -37,10 +38,11 @@ func DefaultCLIOutput() *CLIOutput {
 	return NewCLIOutput(os.Stdout, os.Stderr)
 }
 
-func (o *CLIOutput) Info(msg string)    { fmt.Fprintln(o.err, msg) }
-func (o *CLIOutput) Result(v any)       { json.NewEncoder(o.out).Encode(v) }
-func (o *CLIOutput) Text(token string)  { fmt.Fprint(o.out, token) }
-func (o *CLIOutput) Done()              { fmt.Fprintln(o.out) }
+func (o *CLIOutput) Info(msg string)       { fmt.Fprintln(o.err, msg) }
+func (o *CLIOutput) Result(v any)          { json.NewEncoder(o.out).Encode(v) }
+func (o *CLIOutput) Thinking(token string) { fmt.Fprint(o.err, token) }
+func (o *CLIOutput) Text(token string)     { fmt.Fprint(o.out, token) }
+func (o *CLIOutput) Done()                 { fmt.Fprintln(o.out) }
 
 func (o *CLIOutput) ToolCall(name, args string) {
 	fmt.Fprintf(o.err, "[tool] %s(%s)\n", name, truncate(args, 80))
@@ -74,6 +76,10 @@ func (o *JSONLOutput) Info(msg string) {
 
 func (o *JSONLOutput) Result(v any) {
 	o.emit(map[string]any{"type": "result", "data": v})
+}
+
+func (o *JSONLOutput) Thinking(token string) {
+	o.emit(map[string]string{"type": "thinking", "content": token})
 }
 
 func (o *JSONLOutput) Text(token string) {

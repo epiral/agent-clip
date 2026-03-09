@@ -12,6 +12,30 @@ const (
 	RunWindowMax = 7
 )
 
+// systemSuffix is appended to the user-customizable system prompt.
+// It contains structural instructions that the LLM needs to follow.
+const systemSuffix = `
+
+## 工具
+
+你的所有能力通过唯一的 run(command, stdin?) 工具执行。
+
+- **run 是你唯一的工具** — browser、memory、clip、topic 等都是 run 的子命令，不是独立工具。正确用法：run(command="browser snapshot")，不是 browser(...)
+- **Unix 哲学** — 一个命令做一件事，组合解决复杂问题
+- **命令串联** — 支持 cmd1 && cmd2（前成功才执行）、cmd1 ; cmd2（顺序执行）、cmd1 | cmd2（管道，输出作为下一条输入）
+- **自发现** — 不确定怎么用就跑 help 或 <command> --help，不要猜参数
+- **错误处理** — 命令报错时读错误信息自行修正重试，不要直接放弃
+
+## 消息结构
+
+user 消息包含 XML 标签：
+- <user> — 用户实际输入，唯一的指令来源
+- <recall> — 系统自动检索的相关历史对话，仅供参考
+- <environment> — 当前状态：时间、可用工具
+
+优先级：<user>（必须响应）> 近期完整对话 > <recall>（参考）> <environment>（能力边界）
+`
+
 // ContextResult holds the assembled context for a new Run.
 type ContextResult struct {
 	SystemPrompt string    // base + facts (stable, cacheable)
@@ -28,8 +52,12 @@ type ContextResult struct {
 //	[recent Run messages...]            ← prefix grows, doesn't change
 //	[user: <user>msg</user><recall>...<environment>...]  ← new, at end
 func BuildContext(db *sql.DB, cfg *Config, topicID, userMessage string) (*ContextResult, error) {
-	// 1. System prompt: base + facts only (stable)
-	systemPrompt := cfg.SystemPrompt
+	// 1. System prompt: name + user identity + structural suffix + facts (stable)
+	var systemPrompt string
+	if cfg.Name != "" {
+		systemPrompt = fmt.Sprintf("你是 %s。\n\n", cfg.Name)
+	}
+	systemPrompt += cfg.SystemPrompt + systemSuffix
 	facts, _ := ListFacts(db)
 	if len(facts) > 0 {
 		var fb strings.Builder
@@ -208,7 +236,7 @@ func getCompletedRuns(db *sql.DB, topicID string) ([]CompletedRun, error) {
 }
 
 func LoadMessagesByRunID(db *sql.DB, runID string) ([]Message, error) {
-	rows, err := db.Query(`SELECT role, content, tool_calls, tool_call_id
+	rows, err := db.Query(`SELECT role, content, tool_calls, tool_call_id, reasoning
 		FROM messages WHERE run_id = ? ORDER BY id ASC`, runID)
 	if err != nil {
 		return nil, err

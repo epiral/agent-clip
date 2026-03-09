@@ -302,7 +302,7 @@ func GenerateSummary(db *sql.DB, cfg *Config, newMsgs []Message) (string, error)
 		TextMessage("user", prompt),
 	}
 
-	resp, err := CallLLM(cfg, messages, nil, nil)
+	resp, err := CallLLM(cfg, messages, nil, nil, nil)
 	if err != nil {
 		for _, m := range newMsgs {
 			if m.Role == "user" && m.Content != nil {

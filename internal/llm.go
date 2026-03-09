@@ -25,6 +25,7 @@ type Message struct {
 	Content    *string    `json:"content"`
 	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
 	ToolCallID string     `json:"tool_call_id,omitempty"`
+	Reasoning  *string    `json:"-"` // thinking content; excluded from LLM API serialization
 }
 
 type ToolCall struct {
@@ -63,6 +64,7 @@ type ToolFunctionDef struct {
 
 type LLMResponse struct {
 	Content   string
+	Reasoning string
 	ToolCalls []ToolCall
 }
 
@@ -74,8 +76,9 @@ type chatRequest struct {
 }
 
 type streamDelta struct {
-	Content   string           `json:"content"`
-	ToolCalls []streamToolCall `json:"tool_calls"`
+	Content          string           `json:"content"`
+	ReasoningContent string           `json:"reasoning_content"`
+	ToolCalls        []streamToolCall `json:"tool_calls"`
 }
 
 type streamToolCall struct {
@@ -97,7 +100,7 @@ type streamChunk struct {
 
 // CallLLM sends a streaming request and returns text content and/or tool calls.
 // Text tokens are passed to onToken as they arrive.
-func CallLLM(cfg *Config, messages []Message, tools []ToolDef, onToken func(string)) (*LLMResponse, error) {
+func CallLLM(cfg *Config, messages []Message, tools []ToolDef, onToken func(string), onThinking func(string)) (*LLMResponse, error) {
 	provider, err := cfg.GetLLMProvider()
 	if err != nil {
 		return nil, err
@@ -139,6 +142,7 @@ func CallLLM(cfg *Config, messages []Message, tools []ToolDef, onToken func(stri
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 
 	var contentBuf strings.Builder
+	var reasoningBuf strings.Builder
 	tcMap := make(map[int]*ToolCall)
 
 	for scanner.Scan() {
@@ -160,6 +164,14 @@ func CallLLM(cfg *Config, messages []Message, tools []ToolDef, onToken func(stri
 		}
 
 		delta := chunk.Choices[0].Delta
+
+		// accumulate reasoning/thinking content
+		if delta.ReasoningContent != "" {
+			reasoningBuf.WriteString(delta.ReasoningContent)
+			if onThinking != nil {
+				onThinking(delta.ReasoningContent)
+			}
+		}
 
 		// accumulate text content
 		if delta.Content != "" {
@@ -186,7 +198,7 @@ func CallLLM(cfg *Config, messages []Message, tools []ToolDef, onToken func(stri
 		return nil, fmt.Errorf("read stream: %w", err)
 	}
 
-	result := &LLMResponse{Content: contentBuf.String()}
+	result := &LLMResponse{Content: contentBuf.String(), Reasoning: reasoningBuf.String()}
 
 	if len(tcMap) > 0 {
 		indices := make([]int, 0, len(tcMap))

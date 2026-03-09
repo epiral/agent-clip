@@ -11,7 +11,7 @@ import (
 
 func RunToolDef(commands map[string]string) ToolDef {
 	var desc strings.Builder
-	desc.WriteString("Execute a command. Available commands:\n")
+	desc.WriteString("Your ONLY tool. Execute commands via run(command=\"...\"). Supports chaining: cmd1 && cmd2, cmd1 | cmd2.\n\nAvailable commands:\n")
 	for name, help := range commands {
 		fmt.Fprintf(&desc, "  %s — %s\n", name, help)
 	}

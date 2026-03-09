@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"syscall"
 	"time"
 
@@ -29,6 +30,7 @@ func main() {
 	root.AddCommand(listTopicsCmd())
 	root.AddCommand(getRunCmd())
 	root.AddCommand(cancelRunCmd())
+	root.AddCommand(configCmd())
 	root.AddCommand(workerCmd())
 	root.AddCommand(memoryWorkerCmd())
 
@@ -48,7 +50,43 @@ func buildRegistry(db *sql.DB, cfg *internal.Config) *internal.Registry {
 	internal.RegisterBrowserCommands(registry, cfg)
 	internal.RegisterMemoryCommands(registry, db, cfg)
 	internal.RegisterTopicCommands(registry, db, cfg)
+	internal.RegisterConfigCommands(registry)
 	return registry
+}
+
+func configCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "config [set <key> <value>]",
+		Short: "Show or update agent configuration",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			out := getOutput()
+
+			if len(args) == 0 {
+				// show config
+				cfg, err := internal.LoadConfig()
+				if err != nil {
+					return err
+				}
+				out.Result(internal.ConfigGet(cfg))
+				return nil
+			}
+
+			if args[0] == "set" {
+				if len(args) < 3 {
+					return fmt.Errorf("usage: config set <key> <value>")
+				}
+				key := args[1]
+				value := strings.Join(args[2:], " ")
+				if err := internal.ConfigSet(key, value); err != nil {
+					return err
+				}
+				out.Info(fmt.Sprintf("%s = %s", key, value))
+				return nil
+			}
+
+			return fmt.Errorf("usage: config [set <key> <value>]")
+		},
+	}
 }
 
 func sendCmd() *cobra.Command {
