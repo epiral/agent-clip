@@ -41,6 +41,23 @@ func getOutput() internal.Output {
 	return internal.NewOutput(outputFormat)
 }
 
+func buildRegistry(db *sql.DB, cfg *internal.Config) *internal.Registry {
+	registry := internal.NewRegistry()
+	internal.RegisterClipCommands(registry, cfg)
+	internal.RegisterMemoryCommands(registry, db, cfg)
+	return registry
+}
+
+// extractReply finds the last assistant text response from newMsgs.
+func extractReply(msgs []internal.Message) string {
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if msgs[i].Role == "assistant" && msgs[i].Content != nil && len(msgs[i].ToolCalls) == 0 {
+			return *msgs[i].Content
+		}
+	}
+	return ""
+}
+
 func sendCmd() *cobra.Command {
 	var payload, topicID, runID string
 	var async bool
@@ -72,14 +89,12 @@ func sendCmd() *cobra.Command {
 				return fmt.Errorf("message is required (-p or stdin JSON)")
 			}
 
-			// --- inject mode ---
 			if runID != "" {
 				db, err := internal.OpenDB()
 				if err != nil {
 					return err
 				}
 				defer db.Close()
-
 				if err := internal.InjectMessage(db, runID, message); err != nil {
 					return err
 				}
@@ -93,7 +108,6 @@ func sendCmd() *cobra.Command {
 			}
 			defer db.Close()
 
-			// auto-create topic
 			if topicID == "" {
 				name := message
 				if len([]rune(name)) > 30 {
@@ -107,7 +121,6 @@ func sendCmd() *cobra.Command {
 				out.Info(fmt.Sprintf("[topic] %s (%s)", topicID, topic.Name))
 			}
 
-			// defense
 			activeRun, err := internal.GetActiveRun(db, topicID)
 			if err != nil {
 				return err
@@ -149,8 +162,7 @@ func runSync(db *sql.DB, topicID, message string, out internal.Output) error {
 		return err
 	}
 
-	registry := internal.NewRegistry()
-			internal.RegisterClipCommands(registry, cfg)
+	registry := buildRegistry(db, cfg)
 	rc := &internal.RunContext{DB: db, RunID: run.ID}
 
 	newMsgs, err := internal.RunLoop(cfg, history, message, registry, out, rc)
@@ -163,6 +175,9 @@ func runSync(db *sql.DB, topicID, message string, out internal.Output) error {
 		_ = internal.FinishRun(db, run.ID, "error")
 		return err
 	}
+
+	// process memory asynchronously
+	internal.ProcessMemoryAsync(db, cfg, topicID, message, extractReply(newMsgs))
 
 	return nil
 }
@@ -228,8 +243,7 @@ func workerCmd() *cobra.Command {
 				return err
 			}
 
-			registry := internal.NewRegistry()
-			internal.RegisterClipCommands(registry, cfg)
+			registry := buildRegistry(db, cfg)
 			out := internal.AsyncFileOutput(runID)
 			rc := &internal.RunContext{DB: db, RunID: runID}
 
@@ -244,6 +258,9 @@ func workerCmd() *cobra.Command {
 				_ = internal.FinishRun(db, runID, "error")
 				return err
 			}
+
+			// process memory (sync in worker since it's already background)
+			internal.ProcessMemoryAsync(db, cfg, topicID, message, extractReply(newMsgs))
 
 			return nil
 		},

@@ -14,9 +14,17 @@ type RunContext struct {
 }
 
 // RunLoop executes the agentic loop.
-// All output goes through the Output interface.
 func RunLoop(cfg *Config, history []Message, userMessage string, registry *Registry, out Output, rc *RunContext) ([]Message, error) {
-	context := []Message{TextMessage("system", cfg.SystemPrompt)}
+	// build system prompt with memory context
+	systemPrompt := cfg.SystemPrompt
+	if rc != nil && rc.DB != nil {
+		memoryCtx := BuildMemoryContext(rc.DB, cfg, userMessage)
+		if memoryCtx != "" {
+			systemPrompt += memoryCtx
+		}
+	}
+
+	context := []Message{TextMessage("system", systemPrompt)}
 	context = append(context, history...)
 
 	userMsg := TextMessage("user", userMessage)
