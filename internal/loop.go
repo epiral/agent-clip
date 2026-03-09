@@ -4,21 +4,18 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"os"
 )
 
 const maxIterations = 20
 
-// RunContext controls how the agentic loop interacts with the outside world.
 type RunContext struct {
 	DB    *sql.DB
 	RunID string
-	Async bool
 }
 
 // RunLoop executes the agentic loop.
-// Returns all new messages generated in this run.
-func RunLoop(cfg *Config, history []Message, userMessage string, registry *Registry, onToken func(string), rc *RunContext) ([]Message, error) {
+// All output goes through the Output interface.
+func RunLoop(cfg *Config, history []Message, userMessage string, registry *Registry, out Output, rc *RunContext) ([]Message, error) {
 	context := []Message{TextMessage("system", cfg.SystemPrompt)}
 	context = append(context, history...)
 
@@ -29,28 +26,28 @@ func RunLoop(cfg *Config, history []Message, userMessage string, registry *Regis
 	tools := []ToolDef{RunToolDef(registry.Help())}
 
 	for i := 0; i < maxIterations; i++ {
-		// check inbox for injected messages
+		// check inbox
 		if rc != nil && rc.DB != nil {
-			injected := drainInboxSafe(rc)
-			for _, msg := range injected {
-				injectMsg := TextMessage("user", msg)
-				context = append(context, injectMsg)
-				newMsgs = append(newMsgs, injectMsg)
-				logInject(rc, msg)
+			if injected, _ := DrainInbox(rc.DB, rc.RunID); len(injected) > 0 {
+				for _, msg := range injected {
+					out.Inject(msg)
+					injectMsg := TextMessage("user", msg)
+					context = append(context, injectMsg)
+					newMsgs = append(newMsgs, injectMsg)
+				}
 			}
 		}
 
-		resp, err := CallLLM(cfg, context, tools, onToken)
+		resp, err := CallLLM(cfg, context, tools, func(token string) {
+			out.Text(token)
+		})
 		if err != nil {
 			return nil, err
 		}
 
-		// --- tool_calls → execute and continue loop ---
+		// --- tool_calls ---
 		if len(resp.ToolCalls) > 0 {
-			assistantMsg := Message{
-				Role:      "assistant",
-				ToolCalls: resp.ToolCalls,
-			}
+			assistantMsg := Message{Role: "assistant", ToolCalls: resp.ToolCalls}
 			if resp.Content != "" {
 				assistantMsg.Content = &resp.Content
 			}
@@ -58,8 +55,9 @@ func RunLoop(cfg *Config, history []Message, userMessage string, registry *Regis
 			newMsgs = append(newMsgs, assistantMsg)
 
 			for _, tc := range resp.ToolCalls {
+				out.ToolCall(tc.Function.Name, tc.Function.Arguments)
 				result := execToolCall(registry, tc)
-				logTool(rc, tc, result)
+				out.ToolResult(result)
 				toolResult := ToolResultMessage(tc.ID, result)
 				context = append(context, toolResult)
 				newMsgs = append(newMsgs, toolResult)
@@ -67,57 +65,33 @@ func RunLoop(cfg *Config, history []Message, userMessage string, registry *Regis
 			continue
 		}
 
-		// --- stop → try to finish (atomic inbox check) ---
+		// --- stop → atomic finish ---
 		assistantText := resp.Content
 
 		if rc != nil && rc.DB != nil {
-			// atomic: check inbox + finish
 			injected, err := TryFinishRun(rc.DB, rc.RunID, "done")
 			if err != nil {
 				return nil, fmt.Errorf("finish run: %w", err)
 			}
 			if len(injected) > 0 {
-				// inbox had messages — append assistant response + injected, continue loop
 				newMsgs = append(newMsgs, TextMessage("assistant", assistantText))
 				context = append(context, TextMessage("assistant", assistantText))
-
 				for _, msg := range injected {
+					out.Inject(msg)
 					injectMsg := TextMessage("user", msg)
 					context = append(context, injectMsg)
 					newMsgs = append(newMsgs, injectMsg)
-					logInject(rc, msg)
 				}
 				continue
 			}
-			// inbox empty, run marked as done
 		}
 
 		newMsgs = append(newMsgs, TextMessage("assistant", assistantText))
+		out.Done()
 		return newMsgs, nil
 	}
 
 	return nil, fmt.Errorf("agentic loop exceeded %d iterations", maxIterations)
-}
-
-func drainInboxSafe(rc *RunContext) []string {
-	msgs, _ := DrainInbox(rc.DB, rc.RunID)
-	return msgs
-}
-
-func logInject(rc *RunContext, msg string) {
-	line := fmt.Sprintf("\n[injected] %s\n", msg)
-	fmt.Fprint(os.Stderr, line)
-	if rc != nil && rc.Async {
-		AppendOutput(rc.RunID, line)
-	}
-}
-
-func logTool(rc *RunContext, tc ToolCall, result string) {
-	line := fmt.Sprintf("[tool] %s(%s) → %s\n", tc.Function.Name, truncate(tc.Function.Arguments, 80), truncate(result, 120))
-	fmt.Fprint(os.Stderr, line)
-	if rc != nil && rc.Async {
-		AppendOutput(rc.RunID, line)
-	}
 }
 
 func execToolCall(registry *Registry, tc ToolCall) string {

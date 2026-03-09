@@ -14,14 +14,13 @@ import (
 type Run struct {
 	ID         string `json:"id"`
 	TopicID    string `json:"topic_id"`
-	Status     string `json:"status"` // running, done, error, cancelled
+	Status     string `json:"status"`
 	PID        int    `json:"pid"`
 	Async      bool   `json:"async"`
 	StartedAt  int64  `json:"started_at"`
 	FinishedAt *int64 `json:"finished_at,omitempty"`
 }
 
-// CreateRun registers a new Run in the DB.
 func CreateRun(db *sql.DB, topicID string, pid int, async bool) (*Run, error) {
 	r := &Run{
 		ID:        uuid.NewString()[:8],
@@ -43,7 +42,6 @@ func CreateRun(db *sql.DB, topicID string, pid int, async bool) (*Run, error) {
 		return nil, fmt.Errorf("insert run: %w", err)
 	}
 
-	// create output file for async runs
 	if async {
 		dir := runDir(r.ID)
 		os.MkdirAll(dir, 0o755)
@@ -53,8 +51,6 @@ func CreateRun(db *sql.DB, topicID string, pid int, async bool) (*Run, error) {
 	return r, nil
 }
 
-// GetActiveRun returns the active Run for a topic, or nil.
-// Cleans up stale runs where the process has died.
 func GetActiveRun(db *sql.DB, topicID string) (*Run, error) {
 	r, err := scanRun(db.QueryRow(`SELECT id, topic_id, status, pid, async, started_at, finished_at FROM runs WHERE topic_id = ? AND status = 'running'`, topicID))
 	if err == sql.ErrNoRows {
@@ -73,7 +69,6 @@ func GetActiveRun(db *sql.DB, topicID string) (*Run, error) {
 	return r, nil
 }
 
-// GetRun returns a Run by ID.
 func GetRun(db *sql.DB, runID string) (*Run, error) {
 	r, err := scanRun(db.QueryRow(`SELECT id, topic_id, status, pid, async, started_at, finished_at FROM runs WHERE id = ?`, runID))
 	if err == sql.ErrNoRows {
@@ -85,7 +80,6 @@ func GetRun(db *sql.DB, runID string) (*Run, error) {
 	return r, nil
 }
 
-// InjectMessage atomically checks the run is still running and inserts into inbox.
 func InjectMessage(db *sql.DB, runID string, message string) error {
 	tx, err := db.Begin()
 	if err != nil {
@@ -110,7 +104,6 @@ func InjectMessage(db *sql.DB, runID string, message string) error {
 	return tx.Commit()
 }
 
-// DrainInbox reads and deletes all inbox messages for a run.
 func DrainInbox(db *sql.DB, runID string) ([]string, error) {
 	rows, err := db.Query(`SELECT message FROM run_inbox WHERE run_id = ? ORDER BY id ASC`, runID)
 	if err != nil {
@@ -136,8 +129,6 @@ func DrainInbox(db *sql.DB, runID string) ([]string, error) {
 	return msgs, nil
 }
 
-// TryFinishRun atomically checks inbox and finishes the run.
-// Returns injected messages if any (run continues), or nil (run finished).
 func TryFinishRun(db *sql.DB, runID string, status string) ([]string, error) {
 	tx, err := db.Begin()
 	if err != nil {
@@ -145,7 +136,6 @@ func TryFinishRun(db *sql.DB, runID string, status string) ([]string, error) {
 	}
 	defer tx.Rollback()
 
-	// drain inbox within the transaction
 	rows, err := tx.Query(`SELECT message FROM run_inbox WHERE run_id = ? ORDER BY id ASC`, runID)
 	if err != nil {
 		return nil, err
@@ -162,7 +152,6 @@ func TryFinishRun(db *sql.DB, runID string, status string) ([]string, error) {
 	rows.Close()
 
 	if len(msgs) > 0 {
-		// inbox has messages — delete them, keep run alive
 		_, err = tx.Exec(`DELETE FROM run_inbox WHERE run_id = ?`, runID)
 		if err != nil {
 			return nil, err
@@ -170,7 +159,6 @@ func TryFinishRun(db *sql.DB, runID string, status string) ([]string, error) {
 		return msgs, tx.Commit()
 	}
 
-	// inbox empty — finish the run
 	now := time.Now().Unix()
 	_, err = tx.Exec(`UPDATE runs SET status = ?, finished_at = ? WHERE id = ?`, status, now, runID)
 	if err != nil {
@@ -179,7 +167,6 @@ func TryFinishRun(db *sql.DB, runID string, status string) ([]string, error) {
 	return nil, tx.Commit()
 }
 
-// FinishRun marks a Run as done/error/cancelled (no inbox check).
 func FinishRun(db *sql.DB, runID string, status string) error {
 	return finishRunDirect(db, runID, status)
 }
@@ -196,18 +183,12 @@ func runDir(runID string) string {
 	return filepath.Join(clipBase(), "data", "runs", runID)
 }
 
-func AppendOutput(runID string, text string) {
-	path := filepath.Join(runDir(runID), "output")
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0o644)
-	if err != nil {
-		return
-	}
-	defer f.Close()
-	f.WriteString(text)
+func runOutputPath(runID string) string {
+	return filepath.Join(runDir(runID), "output")
 }
 
 func ReadOutput(runID string) string {
-	b, err := os.ReadFile(filepath.Join(runDir(runID), "output"))
+	b, err := os.ReadFile(runOutputPath(runID))
 	if err != nil {
 		return ""
 	}

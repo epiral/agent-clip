@@ -14,11 +14,15 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var outputFormat string
+
 func main() {
 	root := &cobra.Command{
 		Use:   "agent",
 		Short: "Agent Clip CLI",
 	}
+
+	root.PersistentFlags().StringVar(&outputFormat, "output", "raw", "Output format: raw or jsonl")
 
 	root.AddCommand(sendCmd())
 	root.AddCommand(createTopicCmd())
@@ -33,21 +37,19 @@ func main() {
 	}
 }
 
+func getOutput() internal.Output {
+	return internal.NewOutput(outputFormat)
+}
+
 func sendCmd() *cobra.Command {
-	var payload string
-	var topicID string
-	var runID string
+	var payload, topicID, runID string
 	var async bool
 
 	cmd := &cobra.Command{
 		Use:   "send",
 		Short: "Send a message and run the agentic loop",
-		Example: `  send -p "hello"                       # new topic, sync
-  send -p "hello" -t abc123             # continue topic, sync
-  send -p "hello" --async               # new topic, background
-  send -p "hello" -t abc123 --async     # continue topic, background
-  send -p "more info" -r a1b2c3         # inject into active run`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			out := getOutput()
 			message := payload
 			if message == "" {
 				var input struct {
@@ -81,7 +83,7 @@ func sendCmd() *cobra.Command {
 				if err := internal.InjectMessage(db, runID, message); err != nil {
 					return err
 				}
-				fmt.Fprintf(os.Stderr, "[inject] sent to run %s\n", runID)
+				out.Info(fmt.Sprintf("[inject] sent to run %s", runID))
 				return nil
 			}
 
@@ -102,10 +104,10 @@ func sendCmd() *cobra.Command {
 					return err
 				}
 				topicID = topic.ID
-				fmt.Fprintf(os.Stderr, "[topic] %s (%s)\n", topicID, topic.Name)
+				out.Info(fmt.Sprintf("[topic] %s (%s)", topicID, topic.Name))
 			}
 
-			// defense: check for active Run
+			// defense
 			activeRun, err := internal.GetActiveRun(db, topicID)
 			if err != nil {
 				return err
@@ -117,9 +119,9 @@ func sendCmd() *cobra.Command {
 			}
 
 			if async {
-				return startAsync(db, topicID, message)
+				return startAsync(db, topicID, message, out)
 			}
-			return runSync(db, topicID, message)
+			return runSync(db, topicID, message, out)
 		},
 	}
 
@@ -131,7 +133,7 @@ func sendCmd() *cobra.Command {
 	return cmd
 }
 
-func runSync(db *sql.DB, topicID, message string) error {
+func runSync(db *sql.DB, topicID, message string, out internal.Output) error {
 	cfg, err := internal.LoadConfig()
 	if err != nil {
 		return err
@@ -148,28 +150,23 @@ func runSync(db *sql.DB, topicID, message string) error {
 	}
 
 	registry := internal.NewRegistry()
-	rc := &internal.RunContext{DB: db, RunID: run.ID, Async: false}
+	rc := &internal.RunContext{DB: db, RunID: run.ID}
 
-	newMsgs, err := internal.RunLoop(cfg, history, message, registry, func(token string) {
-		fmt.Print(token)
-	}, rc)
-
+	newMsgs, err := internal.RunLoop(cfg, history, message, registry, out, rc)
 	if err != nil {
 		_ = internal.FinishRun(db, run.ID, "error")
 		return err
 	}
-	fmt.Println()
 
 	if err := internal.SaveMessages(db, topicID, newMsgs); err != nil {
 		_ = internal.FinishRun(db, run.ID, "error")
 		return err
 	}
 
-	// TryFinishRun already called by the loop on stop; just save messages
 	return nil
 }
 
-func startAsync(db *sql.DB, topicID, message string) error {
+func startAsync(db *sql.DB, topicID, message string, out internal.Output) error {
 	run, err := internal.CreateRun(db, topicID, 0, true)
 	if err != nil {
 		return err
@@ -196,10 +193,10 @@ func startAsync(db *sql.DB, topicID, message string) error {
 
 	db.Exec("UPDATE runs SET pid = ? WHERE id = ?", cmd.Process.Pid, run.ID)
 
-	fmt.Fprintf(os.Stderr, "[run] %s started (async, pid %d)\n", run.ID, cmd.Process.Pid)
-	fmt.Fprintf(os.Stderr, "  → watch:   get-run %s\n", run.ID)
-	fmt.Fprintf(os.Stderr, "  → inject:  send -p '...' -r %s\n", run.ID)
-	fmt.Fprintf(os.Stderr, "  → cancel:  cancel-run %s\n", run.ID)
+	out.Info(fmt.Sprintf("[run] %s started (async, pid %d)", run.ID, cmd.Process.Pid))
+	out.Info(fmt.Sprintf("  → watch:   get-run %s", run.ID))
+	out.Info(fmt.Sprintf("  → inject:  send -p '...' -r %s", run.ID))
+	out.Info(fmt.Sprintf("  → cancel:  cancel-run %s", run.ID))
 
 	return nil
 }
@@ -231,26 +228,21 @@ func workerCmd() *cobra.Command {
 			}
 
 			registry := internal.NewRegistry()
-			rc := &internal.RunContext{DB: db, RunID: runID, Async: true}
+			out := internal.AsyncFileOutput(runID)
+			rc := &internal.RunContext{DB: db, RunID: runID}
 
-			newMsgs, err := internal.RunLoop(cfg, history, message, registry, func(token string) {
-				internal.AppendOutput(runID, token)
-			}, rc)
-
+			newMsgs, err := internal.RunLoop(cfg, history, message, registry, out, rc)
 			if err != nil {
-				internal.AppendOutput(runID, fmt.Sprintf("\n[error] %v\n", err))
+				out.Info(fmt.Sprintf("[error] %v", err))
 				_ = internal.FinishRun(db, runID, "error")
 				return err
 			}
-
-			internal.AppendOutput(runID, "\n")
 
 			if err := internal.SaveMessages(db, topicID, newMsgs); err != nil {
 				_ = internal.FinishRun(db, runID, "error")
 				return err
 			}
 
-			// Run already marked done by TryFinishRun in the loop
 			return nil
 		},
 	}
@@ -269,6 +261,7 @@ func getRunCmd() *cobra.Command {
 		Short: "Show run status and output",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			out := getOutput()
 			db, err := internal.OpenDB()
 			if err != nil {
 				return err
@@ -285,14 +278,14 @@ func getRunCmd() *cobra.Command {
 				run.Status = "error"
 			}
 
-			fmt.Fprintf(os.Stderr, "[run] %s  topic=%s  status=%s  started=%s\n",
+			out.Info(fmt.Sprintf("[run] %s  topic=%s  status=%s  started=%s",
 				run.ID, run.TopicID, run.Status,
-				time.Unix(run.StartedAt, 0).Format("15:04:05"))
+				time.Unix(run.StartedAt, 0).Format("15:04:05")))
 
 			if run.Async {
 				output := internal.ReadOutput(run.ID)
 				if output != "" {
-					fmt.Print(output)
+					out.Result(map[string]string{"output": output})
 				}
 			}
 
@@ -307,6 +300,7 @@ func cancelRunCmd() *cobra.Command {
 		Short: "Cancel an active run",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			out := getOutput()
 			db, err := internal.OpenDB()
 			if err != nil {
 				return err
@@ -328,7 +322,7 @@ func cancelRunCmd() *cobra.Command {
 			}
 
 			_ = internal.FinishRun(db, run.ID, "cancelled")
-			fmt.Fprintf(os.Stderr, "[run] %s cancelled\n", run.ID)
+			out.Info(fmt.Sprintf("[run] %s cancelled", run.ID))
 			return nil
 		},
 	}
@@ -338,10 +332,10 @@ func createTopicCmd() *cobra.Command {
 	var name string
 
 	cmd := &cobra.Command{
-		Use:     "create-topic",
-		Short:   "Create a new conversation topic",
-		Example: `  create-topic -n "聊代码"`,
+		Use:   "create-topic",
+		Short: "Create a new conversation topic",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			out := getOutput()
 			if name == "" {
 				var input struct {
 					Name string `json:"name"`
@@ -366,7 +360,8 @@ func createTopicCmd() *cobra.Command {
 				return err
 			}
 
-			return json.NewEncoder(os.Stdout).Encode(topic)
+			out.Result(topic)
+			return nil
 		},
 	}
 
@@ -379,6 +374,7 @@ func listTopicsCmd() *cobra.Command {
 		Use:   "list-topics",
 		Short: "List all conversation topics",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			out := getOutput()
 			db, err := internal.OpenDB()
 			if err != nil {
 				return err
@@ -390,7 +386,8 @@ func listTopicsCmd() *cobra.Command {
 				return err
 			}
 
-			return json.NewEncoder(os.Stdout).Encode(topics)
+			out.Result(topics)
+			return nil
 		},
 	}
 }
