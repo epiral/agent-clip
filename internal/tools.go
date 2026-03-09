@@ -379,6 +379,7 @@ func memoryFacts(db *sql.DB) (string, error) {
 	}
 
 	var b strings.Builder
+	fmt.Fprintf(&b, "Facts (%d total):\n", len(facts))
 	for _, f := range facts {
 		fmt.Fprintf(&b, "  #%d [%s] %s\n", f.ID, f.Category, f.Content)
 	}
@@ -388,9 +389,9 @@ func memoryFacts(db *sql.DB) (string, error) {
 // RegisterTopicCommands adds topic management commands to the registry.
 func RegisterTopicCommands(r *Registry, db *sql.DB) {
 	r.Register("topic", `Manage conversation topics.
-  topic list                       — list all topics
+  topic list [limit]               — list topics (default: 10, newest first)
   topic info <id>                  — show topic details and run history
-  topic runs <id>                  — list runs with summaries
+  topic runs <id> [limit]          — list runs (default: 10, newest first)
   topic run <id> <N>               — show run N's full messages
   topic rename <id> <new-name>     — rename a topic`,
 		func(args []string, stdin string) (string, error) {
@@ -400,7 +401,13 @@ func RegisterTopicCommands(r *Registry, db *sql.DB) {
 
 			switch args[0] {
 			case "list":
-				return topicList(db)
+				limit := 10
+				if len(args) > 1 {
+					if n, err := strconv.Atoi(args[1]); err == nil {
+						limit = n
+					}
+				}
+				return topicList(db, limit)
 
 			case "info":
 				if len(args) < 2 {
@@ -420,9 +427,15 @@ func RegisterTopicCommands(r *Registry, db *sql.DB) {
 
 			case "runs":
 				if len(args) < 2 {
-					return "", fmt.Errorf("usage: topic runs <id>")
+					return "", fmt.Errorf("usage: topic runs <id> [limit]")
 				}
-				return topicRuns(db, args[1])
+				limit := 10
+				if len(args) > 2 {
+					if n, err := strconv.Atoi(args[2]); err == nil {
+						limit = n
+					}
+				}
+				return topicRuns(db, args[1], limit)
 
 			case "run":
 				if len(args) < 3 {
@@ -440,7 +453,7 @@ func RegisterTopicCommands(r *Registry, db *sql.DB) {
 		})
 }
 
-func topicList(db *sql.DB) (string, error) {
+func topicList(db *sql.DB, limit int) (string, error) {
 	topics, err := ListTopics(db)
 	if err != nil {
 		return "", err
@@ -449,7 +462,13 @@ func topicList(db *sql.DB) (string, error) {
 		return "No topics.", nil
 	}
 
+	total := len(topics)
+	if limit > 0 && limit < total {
+		topics = topics[:limit]
+	}
+
 	var b strings.Builder
+	fmt.Fprintf(&b, "Topics (%d of %d, newest first):\n", len(topics), total)
 	for _, t := range topics {
 		ts := time.Unix(t.CreatedAt, 0).Format("01-02 15:04")
 		fmt.Fprintf(&b, "  %s  %s  (%d msgs)  %s\n", t.ID, t.Name, t.MessageCount, ts)
@@ -470,8 +489,14 @@ func topicInfo(db *sql.DB, id string) (string, error) {
 	// list runs with summaries and tool counts
 	runs, _ := getTopicRuns(db, id)
 	if len(runs) > 0 {
-		fmt.Fprintf(&b, "Runs: %d\n\n", len(runs))
-		for i, r := range runs {
+		total := len(runs)
+		showRuns := runs
+		if len(showRuns) > 5 {
+			showRuns = showRuns[len(showRuns)-5:]
+		}
+		fmt.Fprintf(&b, "Runs: %d (showing last %d)\n\n", total, len(showRuns))
+		for i, r := range showRuns {
+			i = total - len(showRuns) + i
 			ts := time.Unix(r.StartedAt, 0).Format("15:04:05")
 			duration := ""
 			if r.FinishedAt > 0 {
@@ -523,7 +548,7 @@ func getTopicRuns(db *sql.DB, topicID string) ([]topicRunInfo, error) {
 	return runs, rows.Err()
 }
 
-func topicRuns(db *sql.DB, topicID string) (string, error) {
+func topicRuns(db *sql.DB, topicID string, limit int) (string, error) {
 	runs, err := getTopicRuns(db, topicID)
 	if err != nil {
 		return "", err
@@ -532,15 +557,24 @@ func topicRuns(db *sql.DB, topicID string) (string, error) {
 		return "No runs in this topic.", nil
 	}
 
+	total := len(runs)
+	// show newest first: take last N runs, reverse
+	if limit > 0 && limit < total {
+		runs = runs[total-limit:]
+	}
+
 	var b strings.Builder
-	for i, r := range runs {
+	fmt.Fprintf(&b, "Runs (%d of %d, newest first):\n", len(runs), total)
+	for i := len(runs) - 1; i >= 0; i-- {
+		r := runs[i]
+		runNum := total - (len(runs) - 1 - i)
 		ts := time.Unix(r.StartedAt, 0).Format("15:04:05")
 		duration := ""
 		if r.FinishedAt > 0 {
 			d := time.Duration(r.FinishedAt-r.StartedAt) * time.Second
 			duration = fmt.Sprintf(" (%s)", d)
 		}
-		fmt.Fprintf(&b, "  #%d [%s]%s  status=%s  tools=%d\n", i+1, ts, duration, r.Status, r.ToolCount)
+		fmt.Fprintf(&b, "  #%d [%s]%s  status=%s  tools=%d\n", runNum, ts, duration, r.Status, r.ToolCount)
 		if r.Summary != "" {
 			fmt.Fprintf(&b, "     %s\n", r.Summary)
 		}
