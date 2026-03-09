@@ -246,11 +246,13 @@ func (r *Registry) registerBuiltins() {
 // RegisterMemoryCommands adds memory-related commands to the registry.
 func RegisterMemoryCommands(r *Registry, db *sql.DB, cfg *Config) {
 	r.Register("memory", `Search or manage memory.
-  memory search <query>    — search past conversations (semantic + keyword)
-  memory recent [n]        — show recent conversation summaries
-  memory store <note>      — store a fact/note for long-term memory
-  memory facts             — list all stored facts
-  memory forget <id>       — delete a fact by ID`,
+  memory search <query>              — search across all topics (semantic + keyword)
+  memory search <query> -t <id>      — search within a specific topic
+  memory search <query> -k <keyword> — filter results by keyword
+  memory recent [n]                  — show recent conversation summaries
+  memory store <note>                — store a fact/note
+  memory facts                       — list all stored facts
+  memory forget <id>                 — delete a fact by ID`,
 		func(args []string, stdin string) (string, error) {
 			if len(args) == 0 {
 				return "", fmt.Errorf("usage: memory search|recent|store|facts|forget")
@@ -259,10 +261,9 @@ func RegisterMemoryCommands(r *Registry, db *sql.DB, cfg *Config) {
 			switch args[0] {
 			case "search":
 				if len(args) < 2 {
-					return "", fmt.Errorf("usage: memory search <query>")
+					return "", fmt.Errorf("usage: memory search <query> [-t topic_id] [-k keyword]")
 				}
-				query := strings.Join(args[1:], " ")
-				return memorySearch(db, cfg, query)
+				return memorySearchCmd(db, cfg, args[1:])
 
 			case "recent":
 				limit := 5
@@ -308,44 +309,38 @@ func RegisterMemoryCommands(r *Registry, db *sql.DB, cfg *Config) {
 		})
 }
 
-func memorySearch(db *sql.DB, cfg *Config, query string) (string, error) {
-	var results []Summary
+func memorySearchCmd(db *sql.DB, cfg *Config, args []string) (string, error) {
+	var queryParts []string
+	filter := SearchFilter{Limit: 5}
 
-	// try semantic search first
-	queryEmb, err := GetEmbedding(cfg, query)
-	if err == nil && len(queryEmb) > 0 {
-		results, _ = SearchMemorySemantic(db, queryEmb, 5)
-	}
-
-	// fallback/supplement with keyword search
-	if len(results) < 3 {
-		kwResults, _ := SearchMemoryKeyword(db, query, 5)
-		// deduplicate
-		seen := make(map[int]bool)
-		for _, r := range results {
-			seen[r.ID] = true
-		}
-		for _, r := range kwResults {
-			if !seen[r.ID] {
-				results = append(results, r)
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "-t":
+			if i+1 < len(args) {
+				filter.TopicID = args[i+1]
+				i++
 			}
+		case "-k":
+			if i+1 < len(args) {
+				filter.Keyword = args[i+1]
+				i++
+			}
+		default:
+			queryParts = append(queryParts, args[i])
 		}
 	}
 
-	if len(results) == 0 {
-		return "No matching memories found.", nil
+	query := strings.Join(queryParts, " ")
+	if query == "" {
+		return "", fmt.Errorf("query is required")
 	}
 
-	var b strings.Builder
-	for _, r := range results {
-		ts := time.Unix(r.CreatedAt, 0).Format("2006-01-02 15:04")
-		if r.Similarity > 0 {
-			fmt.Fprintf(&b, "[%s] (%.0f%%) %s\n", ts, r.Similarity*100, r.SummaryText)
-		} else {
-			fmt.Fprintf(&b, "[%s] %s\n", ts, r.SummaryText)
-		}
+	results, err := SearchMemory(db, cfg, query, filter)
+	if err != nil {
+		return "", err
 	}
-	return b.String(), nil
+
+	return FormatSearchResults(results), nil
 }
 
 func memoryRecent(db *sql.DB, limit int) (string, error) {
@@ -387,13 +382,14 @@ func memoryFacts(db *sql.DB) (string, error) {
 }
 
 // RegisterTopicCommands adds topic management commands to the registry.
-func RegisterTopicCommands(r *Registry, db *sql.DB) {
+func RegisterTopicCommands(r *Registry, db *sql.DB, cfg *Config) {
 	r.Register("topic", `Manage conversation topics.
   topic list [limit]               — list topics (default: 10, newest first)
   topic info <id>                  — show topic details and run history
   topic runs <id> [limit]          — list runs (default: 10, newest first)
   topic run <run-id>               — show a run's full messages
-  topic rename <id> <new-name>     — rename a topic`,
+  topic rename <id> <new-name>     — rename a topic
+  topic search <id> <query>        — search within a topic`,
 		func(args []string, stdin string) (string, error) {
 			if len(args) == 0 {
 				return "", fmt.Errorf("usage: topic list|info|rename|current")
@@ -443,8 +439,20 @@ func RegisterTopicCommands(r *Registry, db *sql.DB) {
 				}
 				return topicRunDetail(db, args[1])
 
+			case "search":
+				if len(args) < 3 {
+					return "", fmt.Errorf("usage: topic search <topic-id> <query>")
+				}
+				topicID := args[1]
+				query := strings.Join(args[2:], " ")
+				results, err := SearchMemory(db, cfg, query, SearchFilter{TopicID: topicID, Limit: 10})
+				if err != nil {
+					return "", err
+				}
+				return FormatSearchResults(results), nil
+
 			default:
-				return "", fmt.Errorf("unknown: topic %s. Use: list|info|runs|run|rename", args[0])
+				return "", fmt.Errorf("unknown: topic %s. Use: list|info|runs|run|search|rename", args[0])
 			}
 		})
 }
