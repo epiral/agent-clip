@@ -112,6 +112,7 @@ func (r *Registry) Exec(command, stdin string) string {
 		return "[error] empty command"
 	}
 
+	var collected []string // accumulated outputs for && and ;
 	var lastOutput string
 	var lastErr bool
 	pipeInput := stdin
@@ -122,7 +123,7 @@ func (r *Registry) Exec(command, stdin string) string {
 			break
 		}
 
-		// pipe: previous output becomes stdin
+		// determine stdin for this segment
 		segStdin := ""
 		if i == 0 {
 			segStdin = pipeInput
@@ -131,9 +132,19 @@ func (r *Registry) Exec(command, stdin string) string {
 		}
 
 		lastOutput, lastErr = r.execSingle(seg.Raw, segStdin)
+
+		// pipe: output flows to next command's stdin, don't collect yet
+		// && or ;: collect output (like shell concatenates stdout)
+		if i < len(segments)-1 && seg.Op == OpPipe {
+			// piping — lastOutput will be next command's stdin
+			continue
+		}
+		if lastOutput != "" {
+			collected = append(collected, lastOutput)
+		}
 	}
 
-	return lastOutput
+	return strings.Join(collected, "\n")
 }
 
 func (r *Registry) execSingle(command, stdin string) (string, bool) {
