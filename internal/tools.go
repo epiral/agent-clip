@@ -688,11 +688,7 @@ func topicRunDetail(db *sql.DB, runID string) (string, error) {
 		switch m.Role {
 		case "user":
 			if m.Content != nil {
-				text := *m.Content
-				if len(text) > 300 {
-					text = text[:300] + "..."
-				}
-				fmt.Fprintf(&b, "\n[user] %s\n", text)
+				fmt.Fprintf(&b, "\n[user] %s\n", truncate(*m.Content, 300))
 			}
 		case "assistant":
 			if len(m.ToolCalls) > 0 {
@@ -701,19 +697,11 @@ func topicRunDetail(db *sql.DB, runID string) (string, error) {
 				}
 			}
 			if m.Content != nil && *m.Content != "" {
-				text := *m.Content
-				if len(text) > 500 {
-					text = text[:500] + "..."
-				}
-				fmt.Fprintf(&b, "[assistant] %s\n", text)
+				fmt.Fprintf(&b, "[assistant] %s\n", truncate(*m.Content, 500))
 			}
 		case "tool":
 			if m.Content != nil {
-				text := *m.Content
-				if len(text) > 200 {
-					text = text[:200] + "..."
-				}
-				fmt.Fprintf(&b, "[tool_result] %s\n", text)
+				fmt.Fprintf(&b, "[tool_result] %s\n", truncate(*m.Content, 200))
 			}
 		}
 	}

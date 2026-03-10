@@ -258,17 +258,13 @@ func renderTrajectory(msgs []Message) string {
 			}
 			if m.Content != nil && *m.Content != "" {
 				text := *m.Content
-				if len(text) > 1500 {
-					text = text[:1500] + "..."
-				}
+				text = truncate(text, 1500)
 				fmt.Fprintf(&b, "[assistant] %s\n", text)
 			}
 		case "tool":
 			if m.Content != nil {
 				text := *m.Content
-				if len(text) > 500 {
-					text = text[:500] + "..."
-				}
+				text = truncate(text, 500)
 				fmt.Fprintf(&b, "[tool_result] %s\n", text)
 			}
 		}
@@ -307,9 +303,7 @@ func GenerateSummary(db *sql.DB, cfg *Config, newMsgs []Message) (string, error)
 		for _, m := range newMsgs {
 			if m.Role == "user" && m.Content != nil {
 				text := *m.Content
-				if len(text) > 100 {
-					text = text[:100] + "..."
-				}
+				text = truncate(text, 100)
 				return text, nil
 			}
 		}
