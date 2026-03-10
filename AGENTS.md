@@ -28,13 +28,15 @@ Workspace (this repo)  →  Package (.clip ZIP)  →  Instance (Pinix Server)
 | `cmd/agent/main.go` | CLI entry (cobra), command wiring, sync/async dispatch |
 | `internal/loop.go` | Agentic loop: LLM → tool_calls → execute → repeat |
 | `internal/context.go` | Context assembly: Run Window, XML wrapping, recall injection |
-| `internal/llm.go` | OpenRouter API: streaming, tool support, message types |
+| `internal/llm.go` | LLM API: streaming, tool support, multimodal/vision messages |
 | `internal/tools.go` | Command registry, builtins (memory, topic, grep, etc.) |
 | `internal/chain.go` | Command chain parser (`&&`, `;`, `\|`) |
 | `internal/memory.go` | Summary generation, semantic/keyword search, facts |
 | `internal/embed.go` | Embedding API + cosine similarity (in-process, no vec0) |
 | `internal/run.go` | Run lifecycle: create, finish, inject, inbox (SQLite transactions) |
-| `internal/clip.go` | External Clip invocation via `pinix invoke` |
+| `internal/clip.go` | External Clip invocation via Connect-RPC + pull/push |
+| `internal/fs.go` | File I/O commands: ls, cat, write, stat, rm, cp, mv, mkdir |
+| `internal/browser.go` | bb-browser HTTP client + screenshot auto-save + vision |
 | `internal/db.go` | SQLite: topics, messages, schema migration |
 | `internal/config.go` | Config loading from `data/config.yaml` |
 | `internal/output.go` | Output interface: CLIOutput (raw) / JSONLOutput (jsonl) |
@@ -50,6 +52,10 @@ Workspace (this repo)  →  Package (.clip ZIP)  →  Instance (Pinix Server)
 4. **Atomic inject**: SQLite transactions prevent race conditions between inject and Run finish. Messages never lost.
 
 5. **Dual output**: Every command works for both CLI (raw) and Web (jsonl) via the Output interface.
+
+6. **Vision auto-attach**: Browser screenshots auto-save to `data/images/` and are attached as base64 vision content to tool result messages. The LLM can "see" every screenshot it takes.
+
+7. **Image rendering**: Images in `data/images/` are referenced via `pinix-data://local/data/images/...` URLs. Clip Dock handles the protocol via ReadFile RPC. Streamdown renders `![](pinix-data://...)` natively (rehype-sanitize schema extended).
 
 ## Development
 
