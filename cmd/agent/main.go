@@ -32,6 +32,7 @@ func main() {
 	root.AddCommand(getRunCmd())
 	root.AddCommand(cancelRunCmd())
 	root.AddCommand(configCmd())
+	root.AddCommand(skillCmd())
 	root.AddCommand(uploadCmd())
 	root.AddCommand(workerCmd())
 	root.AddCommand(memoryWorkerCmd())
@@ -133,6 +134,92 @@ func configCmd() *cobra.Command {
 			}
 
 			return fmt.Errorf("unknown subcommand: %s", args[0])
+		},
+	}
+}
+
+func skillCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "skill [subcommand]",
+		Short: "Manage skills (list, get, save, delete)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			out := getOutput()
+			internal.EnsureSkillsDir()
+
+			if len(args) == 0 || args[0] == "list" {
+				skills, err := internal.ListSkills()
+				if err != nil {
+					return err
+				}
+				type skillJSON struct {
+					Name        string `json:"name"`
+					Description string `json:"description"`
+				}
+				result := make([]skillJSON, len(skills))
+				for i, s := range skills {
+					result[i] = skillJSON{Name: s.Name, Description: s.Description}
+				}
+				out.Result(result)
+				return nil
+			}
+
+			switch args[0] {
+			case "get":
+				if len(args) < 2 {
+					return fmt.Errorf("usage: skill get <name>")
+				}
+				desc, body, err := internal.LoadSkill(args[1])
+				if err != nil {
+					return err
+				}
+				out.Result(map[string]string{
+					"name":        args[1],
+					"description": desc,
+					"content":     body,
+				})
+				return nil
+
+			case "save":
+				var input struct {
+					Name        string `json:"name"`
+					Description string `json:"description"`
+					Content     string `json:"content"`
+				}
+				if err := json.NewDecoder(os.Stdin).Decode(&input); err != nil {
+					return fmt.Errorf("read stdin: %w", err)
+				}
+				if input.Name == "" {
+					return fmt.Errorf("name is required")
+				}
+
+				// Check if exists → update, else create
+				_, _, err := internal.LoadSkill(input.Name)
+				if err != nil {
+					// Create
+					if err := internal.CreateSkill(input.Name, input.Description, input.Content); err != nil {
+						return err
+					}
+				} else {
+					// Update
+					if err := internal.UpdateSkill(input.Name, &input.Description, &input.Content); err != nil {
+						return err
+					}
+				}
+				out.Result(map[string]string{"status": "ok", "name": input.Name})
+				return nil
+
+			case "delete":
+				if len(args) < 2 {
+					return fmt.Errorf("usage: skill delete <name>")
+				}
+				if err := internal.DeleteSkill(args[1]); err != nil {
+					return err
+				}
+				out.Result(map[string]string{"status": "ok"})
+				return nil
+			}
+
+			return fmt.Errorf("unknown: skill %s", args[0])
 		},
 	}
 }

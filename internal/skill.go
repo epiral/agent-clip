@@ -113,6 +113,42 @@ func EnsureSkillsDir() {
 	}
 }
 
+// CreateSkill writes a new skill file.
+func CreateSkill(name, description, content string) error {
+	os.MkdirAll(skillsDir(), 0o755)
+	path := skillPath(name)
+	if _, err := os.Stat(path); err == nil {
+		return fmt.Errorf("skill %q already exists", name)
+	}
+	return writeSkillFile(path, description, content)
+}
+
+// UpdateSkill updates a skill's description and/or content.
+func UpdateSkill(name string, newDesc, newContent *string) error {
+	path := skillPath(name)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("skill %q not found", name)
+	}
+	desc, body := parseSkillFile(string(data))
+	if newDesc != nil {
+		desc = *newDesc
+	}
+	if newContent != nil {
+		body = *newContent
+	}
+	return writeSkillFile(path, desc, body)
+}
+
+// DeleteSkill removes a skill file.
+func DeleteSkill(name string) error {
+	path := skillPath(name)
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return fmt.Errorf("skill %q not found", name)
+	}
+	return os.Remove(path)
+}
+
 // RegisterSkillCommands adds skill commands to the registry.
 func RegisterSkillCommands(r *Registry, cfg *Config) {
 	skills, _ := ListSkills()

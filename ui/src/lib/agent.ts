@@ -206,6 +206,38 @@ export async function removeClip(name: string): Promise<void> {
   await invoke("config", { args: ["remove-clip", name] });
 }
 
+// ─── Skills ───
+
+export interface SkillInfo {
+  name: string;
+  description: string;
+}
+
+export interface SkillDetail {
+  name: string;
+  description: string;
+  content: string;
+}
+
+export async function listSkills(): Promise<SkillInfo[]> {
+  return invoke<SkillInfo[]>("skill", { args: ["list"] });
+}
+
+export async function getSkill(name: string): Promise<SkillDetail> {
+  return invoke<SkillDetail>("skill", { args: ["get", name] });
+}
+
+export async function saveSkill(skill: SkillDetail): Promise<void> {
+  await invoke("skill", {
+    args: ["save"],
+    stdin: JSON.stringify(skill),
+  });
+}
+
+export async function deleteSkill(name: string): Promise<void> {
+  await invoke("skill", { args: ["delete", name] });
+}
+
 export function isConfigReady(config: AgentConfig): boolean {
   const provider = config.providers[config.llm_provider];
   return !!(provider && provider.api_key);

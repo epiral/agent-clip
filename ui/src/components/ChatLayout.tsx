@@ -4,6 +4,7 @@ import { TopicList } from "./TopicList";
 import { MessageList, type MessageListHandle } from "./MessageList";
 import { ChatComposer } from "./ChatComposer";
 import { SettingsPanel } from "./SettingsPanel";
+import { SkillPanel } from "./SkillPanel";
 import { SetupPage } from "./SetupPage";
 import { Sheet, SheetContent } from "./ui/sheet";
 import { Menu, Plus, ArrowDown } from "lucide-react";
@@ -15,6 +16,7 @@ export function ChatLayout() {
   const chat = useChat();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [configOpen, setConfigOpen] = useState(false);
+  const [skillsOpen, setSkillsOpen] = useState(false);
   const [agentName, setAgentName] = useState("Clip");
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const messageListRef = useRef<MessageListHandle>(null);
@@ -73,6 +75,7 @@ export function ChatLayout() {
       currentTopicId={chat.currentTopicId}
       onSelectTopic={chat.selectTopic}
       onOpenConfig={() => setConfigOpen(true)}
+      onOpenSkills={() => setSkillsOpen(true)}
       onCloseMobileNav={() => setMobileMenuOpen(false)}
     />
   );
@@ -165,6 +168,7 @@ export function ChatLayout() {
       </div>
 
       <SettingsPanel open={configOpen} onOpenChange={setConfigOpen} />
+      <SkillPanel open={skillsOpen} onOpenChange={setSkillsOpen} />
     </div>
   );
 }
