@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	connect "connectrpc.com/connect"
 	pinixv1 "github.com/epiral/pinix/gen/go/pinix/v1"
@@ -35,7 +36,10 @@ func GetClipInfo(clip *ClipConfig) (*ClipManifest, error) {
 	}
 
 	client := pinixv1connect.NewClipServiceClient(httpClient, clip.URL, connect.WithGRPC())
-	resp, err := client.GetInfo(context.Background(), connect.NewRequest(&pinixv1.GetInfoRequest{}))
+	infoCtx, infoCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer infoCancel()
+
+	resp, err := client.GetInfo(infoCtx, connect.NewRequest(&pinixv1.GetInfoRequest{}))
 	if err != nil {
 		return nil, fmt.Errorf("clip %s GetInfo: %w", clip.Name, err)
 	}
@@ -79,7 +83,10 @@ func InvokeClip(clip *ClipConfig, command string, cmdArgs []string, stdin string
 
 	client := pinixv1connect.NewClipServiceClient(httpClient, clip.URL, connect.WithGRPC())
 
-	stream, err := client.Invoke(context.Background(), connect.NewRequest(&pinixv1.InvokeRequest{
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	stream, err := client.Invoke(ctx, connect.NewRequest(&pinixv1.InvokeRequest{
 		Name:  command,
 		Args:  cmdArgs,
 		Stdin: stdin,
