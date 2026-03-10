@@ -3,8 +3,11 @@ package internal
 import (
 	"context"
 	"crypto/tls"
+	"encoding/base64"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 
 	connect "connectrpc.com/connect"
@@ -83,6 +86,8 @@ func RegisterClipCommands(r *Registry, cfg *Config) {
 	desc.WriteString("Usage:\n")
 	desc.WriteString("  clip list                              — list available clips\n")
 	desc.WriteString("  clip <name> <command> [args...]         — invoke (args passed directly)\n")
+	desc.WriteString("  clip <name> pull <remote-path> [name]   — pull file from clip to local data/\n")
+	desc.WriteString("  clip <name> push <local-path> <remote>  — push local file to clip\n")
 
 	if len(cfg.Clips) > 0 {
 		desc.WriteString("\nAvailable clips:\n")
@@ -120,6 +125,16 @@ func RegisterClipCommands(r *Registry, cfg *Config) {
 
 		command := args[1]
 		cmdArgs := args[2:]
+
+		// clip <name> pull <remote-path> [local-name]
+		if command == "pull" {
+			return clipPull(clip, cmdArgs)
+		}
+		// clip <name> push <local-path> <remote-path>
+		if command == "push" {
+			return clipPush(clip, cmdArgs)
+		}
+
 		return InvokeClip(clip, command, cmdArgs, stdin)
 	})
 }
@@ -137,6 +152,104 @@ func clipList(cfg *Config) string {
 		fmt.Fprintln(&b)
 	}
 	return b.String()
+}
+
+// clipPull reads a file from a remote clip (via read-b64) and saves to local data/.
+func clipPull(clip *ClipConfig, args []string) (string, error) {
+	if len(args) == 0 {
+		return "", fmt.Errorf("usage: clip %s pull <remote-path> [local-name]", clip.Name)
+	}
+	remotePath := args[0]
+
+	// Determine local filename
+	localName := filepath.Base(remotePath)
+	if len(args) > 1 {
+		localName = args[1]
+	}
+
+	// Ensure it goes to images/ for image files, otherwise files/
+	subDir := "files"
+	if isImageFile(localName) {
+		subDir = "images"
+	}
+	localRel := filepath.Join(subDir, localName)
+
+	// Try read-b64 first (binary-safe), fallback to read (text)
+	b64Data, err := InvokeClip(clip, "read-b64", []string{remotePath}, "")
+	if err != nil {
+		// Fallback to text read
+		textData, err2 := InvokeClip(clip, "read", []string{remotePath}, "")
+		if err2 != nil {
+			return "", fmt.Errorf("pull failed: %w", err)
+		}
+		// Save as text
+		abs, err3 := resolvePath(localRel)
+		if err3 != nil {
+			return "", err3
+		}
+		os.MkdirAll(filepath.Dir(abs), 0o755)
+		if err := os.WriteFile(abs, []byte(textData), 0o644); err != nil {
+			return "", fmt.Errorf("write: %w", err)
+		}
+		result := fmt.Sprintf("Pulled %s:%s → %s (%s)", clip.Name, remotePath, localRel, humanSize(int64(len(textData))))
+		if isImageFile(localRel) {
+			result += "\n" + pinixDataURLPrefix + localRel
+		}
+		return result, nil
+	}
+
+	// Decode base64
+	data, err := base64.StdEncoding.DecodeString(strings.TrimSpace(b64Data))
+	if err != nil {
+		return "", fmt.Errorf("base64 decode: %w", err)
+	}
+
+	abs, err := resolvePath(localRel)
+	if err != nil {
+		return "", err
+	}
+	os.MkdirAll(filepath.Dir(abs), 0o755)
+	if err := os.WriteFile(abs, data, 0o644); err != nil {
+		return "", fmt.Errorf("write: %w", err)
+	}
+
+	result := fmt.Sprintf("Pulled %s:%s → %s (%s)", clip.Name, remotePath, localRel, humanSize(int64(len(data))))
+	if isImageFile(localRel) {
+		result += "\n" + pinixDataURLPrefix + localRel
+	}
+	return result, nil
+}
+
+// clipPush reads a local file from data/ and writes to a remote clip.
+func clipPush(clip *ClipConfig, args []string) (string, error) {
+	if len(args) < 2 {
+		return "", fmt.Errorf("usage: clip %s push <local-path> <remote-path>", clip.Name)
+	}
+	localRel := args[0]
+	remotePath := args[1]
+
+	abs, err := resolvePath(localRel)
+	if err != nil {
+		return "", err
+	}
+
+	data, err := os.ReadFile(abs)
+	if err != nil {
+		return "", fmt.Errorf("read local: %w", err)
+	}
+
+	// Try write-b64 first (binary-safe), fallback to write (text)
+	b64 := base64.StdEncoding.EncodeToString(data)
+	_, err = InvokeClip(clip, "write-b64", []string{remotePath}, b64)
+	if err != nil {
+		// Fallback to text write
+		_, err2 := InvokeClip(clip, "write", []string{remotePath, string(data)}, "")
+		if err2 != nil {
+			return "", fmt.Errorf("push failed: %w", err)
+		}
+	}
+
+	return fmt.Sprintf("Pushed %s → %s:%s (%s)", localRel, clip.Name, remotePath, humanSize(int64(len(data)))), nil
 }
 
 func clipInfo(clip *ClipConfig) string {

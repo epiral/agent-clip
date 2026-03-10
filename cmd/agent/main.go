@@ -47,6 +47,7 @@ func getOutput() internal.Output {
 
 func buildRegistry(db *sql.DB, cfg *internal.Config) *internal.Registry {
 	registry := internal.NewRegistry()
+	internal.RegisterFSCommands(registry)
 	internal.RegisterClipCommands(registry, cfg)
 	internal.RegisterBrowserCommands(registry, cfg)
 	internal.RegisterMemoryCommands(registry, db, cfg)
@@ -539,20 +540,22 @@ func listTopicsCmd() *cobra.Command {
 			activeTopics := internal.GetActiveRunTopics(db)
 
 			type webTopic struct {
-				ID           string `json:"id"`
-				Name         string `json:"name"`
-				MessageCount int    `json:"message_count"`
-				CreatedAt    int64  `json:"created_at"`
-				HasActiveRun bool   `json:"has_active_run,omitempty"`
+				ID            string `json:"id"`
+				Name          string `json:"name"`
+				MessageCount  int    `json:"message_count"`
+				CreatedAt     int64  `json:"created_at"`
+				LastMessageAt int64  `json:"last_message_at"`
+				HasActiveRun  bool   `json:"has_active_run,omitempty"`
 			}
 			result := make([]webTopic, 0, len(topics))
 			for _, t := range topics {
 				wt := webTopic{
-					ID:           t.ID,
-					Name:         t.Name,
-					MessageCount: t.MessageCount,
-					CreatedAt:    t.CreatedAt,
-					HasActiveRun: activeTopics[t.ID],
+					ID:            t.ID,
+					Name:          t.Name,
+					MessageCount:  t.MessageCount,
+					CreatedAt:     t.CreatedAt,
+					LastMessageAt: t.LastMessageAt,
+					HasActiveRun:  activeTopics[t.ID],
 				}
 				result = append(result, wt)
 			}
