@@ -154,63 +154,36 @@ func clipList(cfg *Config) string {
 	return b.String()
 }
 
-// clipPull reads a file from a remote clip (via read-b64) and saves to local data/.
+// clipPull reads a file from a remote clip and saves to local topic directory.
+// Uses `read` directly — stdout is binary-safe via gRPC bytes transport.
 func clipPull(clip *ClipConfig, args []string) (string, error) {
 	if len(args) == 0 {
 		return "", fmt.Errorf("usage: clip %s pull <remote-path> [local-name]", clip.Name)
 	}
 	remotePath := args[0]
 
-	// Determine local filename — saved to current topic directory
 	localName := filepath.Base(remotePath)
 	if len(args) > 1 {
 		localName = args[1]
 	}
-	localRel := localName
 
-	// Try read-b64 first (binary-safe), fallback to read (text)
-	b64Data, err := InvokeClip(clip, "read-b64", []string{remotePath}, "")
+	data, err := InvokeClip(clip, "read", []string{remotePath}, "")
 	if err != nil {
-		// Fallback to text read
-		textData, err2 := InvokeClip(clip, "read", []string{remotePath}, "")
-		if err2 != nil {
-			return "", fmt.Errorf("pull failed: %w", err)
-		}
-		// Save as text
-		abs, err3 := resolvePath(localRel)
-		if err3 != nil {
-			return "", err3
-		}
-		os.MkdirAll(filepath.Dir(abs), 0o755)
-		if err := os.WriteFile(abs, []byte(textData), 0o644); err != nil {
-			return "", fmt.Errorf("write: %w", err)
-		}
-		result := fmt.Sprintf("Pulled %s:%s → %s (%s)", clip.Name, remotePath, localRel, humanSize(int64(len(textData))))
-		if IsImageFile(localRel) {
-			relForURL := resolvePathToRelative(localRel)
-			result += fmt.Sprintf("\nRender: ![image](%s%s)", pinixDataURLPrefix, relForURL)
-		}
-		return result, nil
+		return "", fmt.Errorf("pull: %w", err)
 	}
 
-	// Decode base64
-	data, err := base64.StdEncoding.DecodeString(strings.TrimSpace(b64Data))
-	if err != nil {
-		return "", fmt.Errorf("base64 decode: %w", err)
-	}
-
-	abs, err := resolvePath(localRel)
+	abs, err := resolvePath(localName)
 	if err != nil {
 		return "", err
 	}
 	os.MkdirAll(filepath.Dir(abs), 0o755)
-	if err := os.WriteFile(abs, data, 0o644); err != nil {
+	if err := os.WriteFile(abs, []byte(data), 0o644); err != nil {
 		return "", fmt.Errorf("write: %w", err)
 	}
 
-	result := fmt.Sprintf("Pulled %s:%s → %s (%s)", clip.Name, remotePath, localRel, humanSize(int64(len(data))))
-	if IsImageFile(localRel) {
-		relForURL := resolvePathToRelative(localRel)
+	result := fmt.Sprintf("Pulled %s:%s → %s (%s)", clip.Name, remotePath, localName, humanSize(int64(len(data))))
+	if IsImageFile(localName) {
+		relForURL := resolvePathToRelative(localName)
 		result += fmt.Sprintf("\nRender: ![image](%s%s)", pinixDataURLPrefix, relForURL)
 	}
 	return result, nil
@@ -234,15 +207,11 @@ func clipPush(clip *ClipConfig, args []string) (string, error) {
 		return "", fmt.Errorf("read local: %w", err)
 	}
 
-	// Try write-b64 first (binary-safe), fallback to write (text)
+	// Send as base64 via write -b (stdin is protobuf string, must be UTF-8)
 	b64 := base64.StdEncoding.EncodeToString(data)
-	_, err = InvokeClip(clip, "write-b64", []string{remotePath}, b64)
+	_, err = InvokeClip(clip, "write", []string{"-b", remotePath}, b64)
 	if err != nil {
-		// Fallback to text write
-		_, err2 := InvokeClip(clip, "write", []string{remotePath, string(data)}, "")
-		if err2 != nil {
-			return "", fmt.Errorf("push failed: %w", err)
-		}
+		return "", fmt.Errorf("push: %w", err)
 	}
 
 	return fmt.Sprintf("Pushed %s → %s:%s (%s)", localRel, clip.Name, remotePath, humanSize(int64(len(data)))), nil
