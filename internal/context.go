@@ -42,6 +42,14 @@ user 消息包含 XML 标签：
 - ` + "`clip <name> pull <remote>`" + ` / ` + "`clip <name> push <local> <remote>`" + ` — 文件传输
 首次使用某环境时，先运行 ` + "`clip <name>`" + ` 了解能力边界。
 
+## Skills (经验库)
+
+可复用的操作指南，文件驱动。匹配任务时 ` + "`skill load <name>`" + ` 加载执行，避免重复试错。
+- ` + "`skill list`" + ` — 列出可用技能
+- ` + "`skill load <name>`" + ` — 加载完整指令
+- ` + "`skill create <name> --desc \"描述\"`" + ` — 创建（内容通过 stdin）
+创建新 skill 前，先 ` + "`skill load skill-creator`" + ` 获取创作指南。
+
 ## 输出格式
 
 - **数学公式**用 KaTeX 语法：行内 $E=mc^2$，独立行 $$\int_0^1 f(x)dx$$（渲染引擎为 KaTeX，勿用不兼容语法）
@@ -187,6 +195,16 @@ func buildEnvironment(cfg *Config, db *sql.DB) string {
 			}
 		}
 		b.WriteString("</clips>\n")
+	}
+
+	// list available skills
+	skills, _ := ListSkills()
+	if len(skills) > 0 {
+		b.WriteString("<skills>\n")
+		for _, s := range skills {
+			fmt.Fprintf(&b, "  <skill name=%q>%s</skill>\n", s.Name, s.Description)
+		}
+		b.WriteString("</skills>\n")
 	}
 
 	return b.String()

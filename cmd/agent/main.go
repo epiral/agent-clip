@@ -53,6 +53,7 @@ func buildRegistry(db *sql.DB, cfg *internal.Config) *internal.Registry {
 	internal.RegisterBrowserCommands(registry, cfg)
 	internal.RegisterMemoryCommands(registry, db, cfg)
 	internal.RegisterTopicCommands(registry, db, cfg)
+	internal.RegisterSkillCommands(registry, cfg)
 	internal.RegisterConfigCommands(registry)
 	return registry
 }
@@ -239,9 +240,10 @@ func runSync(db *sql.DB, topicID, message string, attachments []string, out inte
 		return err
 	}
 
-	// Ensure topic directory exists and set context for file operations
+	// Ensure topic directory and skills directory exist
 	_ = internal.EnsureTopicDir(topicID)
 	internal.SetCurrentTopic(topicID)
+	internal.EnsureSkillsDir()
 
 	// Probe clips for auto-discovery (GetInfo RPC)
 	internal.ProbeClips(cfg)
