@@ -161,10 +161,52 @@ export async function cancelRun(runId: string): Promise<void> {
 
 // ─── Config ───
 
-export async function getConfig(): Promise<string> {
-  return invoke<string>("config");
+export interface ProviderInfo {
+  protocol: string;
+  base_url: string;
+  api_key: string; // masked
 }
 
-export async function setConfig(key: string, value: string): Promise<string> {
-  return invoke<string>("config", { args: ["set", key, value] });
+export interface ClipInfo {
+  name: string;
+  url: string;
+  token: string; // masked
+  commands: string[];
+}
+
+export interface AgentConfig {
+  name: string;
+  providers: Record<string, ProviderInfo>;
+  llm_provider: string;
+  llm_model: string;
+  embedding_provider: string;
+  embedding_model: string;
+  system_prompt: string;
+  clips: ClipInfo[];
+  browser?: { endpoint: string };
+}
+
+export async function getConfig(): Promise<AgentConfig> {
+  return invoke<AgentConfig>("config");
+}
+
+export async function setConfig(key: string, value: string): Promise<void> {
+  await invoke("config", { args: ["set", key, value] });
+}
+
+export async function deleteConfig(key: string): Promise<void> {
+  await invoke("config", { args: ["delete", key] });
+}
+
+export async function addClip(clip: { name: string; url: string; token: string; commands?: string[] }): Promise<void> {
+  await invoke("config", { args: ["add-clip", JSON.stringify(clip)] });
+}
+
+export async function removeClip(name: string): Promise<void> {
+  await invoke("config", { args: ["remove-clip", name] });
+}
+
+export function isConfigReady(config: AgentConfig): boolean {
+  const provider = config.providers[config.llm_provider];
+  return !!(provider && provider.api_key);
 }

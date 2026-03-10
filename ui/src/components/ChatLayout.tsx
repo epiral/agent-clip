@@ -4,11 +4,12 @@ import { TopicList } from "./TopicList";
 import { MessageList, type MessageListHandle } from "./MessageList";
 import { ChatComposer } from "./ChatComposer";
 import { SettingsPanel } from "./SettingsPanel";
+import { SetupPage } from "./SetupPage";
 import { Sheet, SheetContent } from "./ui/sheet";
 import { Menu, Plus, ArrowDown } from "lucide-react";
 import { Button } from "./ui/button";
 import { useI18n } from "../lib/i18n";
-import { getConfig } from "../lib/agent";
+import { getConfig, isConfigReady, type AgentConfig } from "../lib/agent";
 
 export function ChatLayout() {
   const chat = useChat();
@@ -19,15 +20,50 @@ export function ChatLayout() {
   const messageListRef = useRef<MessageListHandle>(null);
   const { t } = useI18n();
 
-  // Initial load
+  // Config state: null = loading, false = not ready, true = ready
+  const [configState, setConfigState] = useState<null | false | true>(null);
+  const [agentConfig, setAgentConfig] = useState<AgentConfig | null>(null);
+
+  const loadConfig = async () => {
+    try {
+      const cfg = await getConfig();
+      setAgentConfig(cfg);
+      setAgentName(cfg.name || "Clip");
+      setConfigState(isConfigReady(cfg));
+    } catch {
+      setConfigState(false);
+    }
+  };
+
   useEffect(() => {
-    chat.loadTopics();
-    getConfig().then(cfg => {
-      const match = cfg.match(/^name:\s*(.+)$/m);
-      if (match) setAgentName(match[1].trim());
-    }).catch(console.error);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    loadConfig();
   }, []);
+
+  useEffect(() => {
+    if (configState === true) {
+      chat.loadTopics();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [configState]);
+
+  // Show loading while checking config
+  if (configState === null) {
+    return (
+      <div className="flex items-center justify-center h-[100dvh] bg-bg-base">
+        <div className="text-text-mute text-sm animate-pulse">Loading...</div>
+      </div>
+    );
+  }
+
+  // Show setup page if not configured
+  if (configState === false && agentConfig) {
+    return (
+      <SetupPage
+        config={agentConfig}
+        onComplete={() => loadConfig()}
+      />
+    );
+  }
 
   const activeTopic = chat.topics.find((t) => t.id === chat.currentTopicId);
 
@@ -58,7 +94,7 @@ export function ChatLayout() {
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col min-w-0 relative">
         {/* Header */}
-        <header 
+        <header
           className="flex-shrink-0 h-14 border-b border-border-subtle flex items-center px-4 md:px-6 justify-between bg-bg-surface/40 backdrop-blur-md z-20 pt-[env(safe-area-inset-top)]"
           style={{ WebkitAppRegion: "drag" } as any}
         >
@@ -71,13 +107,13 @@ export function ChatLayout() {
             >
               <Menu className="h-4 w-4" />
             </Button>
-            
+
             <div className="flex flex-col min-w-0 flex-1 md:text-left text-center">
               <h1 className="font-semibold text-[11px] tracking-[0.2em] truncate text-text-mute uppercase">
                 {activeTopic ? activeTopic.name : t("New Chat")}
               </h1>
             </div>
-            
+
             <Button
               variant="ghost"
               size="icon"
