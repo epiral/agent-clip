@@ -193,7 +193,7 @@ func clipPull(clip *ClipConfig, args []string) (string, error) {
 		}
 		result := fmt.Sprintf("Pulled %s:%s → %s (%s)", clip.Name, remotePath, localRel, humanSize(int64(len(textData))))
 		if isImageFile(localRel) {
-			result += "\n" + pinixDataURLPrefix + localRel
+			result += fmt.Sprintf("\nRender: ![image](%s%s)", pinixDataURLPrefix, localRel)
 		}
 		return result, nil
 	}
@@ -215,7 +215,7 @@ func clipPull(clip *ClipConfig, args []string) (string, error) {
 
 	result := fmt.Sprintf("Pulled %s:%s → %s (%s)", clip.Name, remotePath, localRel, humanSize(int64(len(data))))
 	if isImageFile(localRel) {
-		result += "\n" + pinixDataURLPrefix + localRel
+		result += fmt.Sprintf("\nRender: ![image](%s%s)", pinixDataURLPrefix, localRel)
 	}
 	return result, nil
 }

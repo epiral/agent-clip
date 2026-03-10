@@ -25,7 +25,13 @@ type Message struct {
 	Content    *string    `json:"content"`
 	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
 	ToolCallID string     `json:"tool_call_id,omitempty"`
-	Reasoning  *string    `json:"-"` // thinking content; excluded from LLM API serialization
+	Reasoning  *string    `json:"-"`
+	Images     []ImageData `json:"-"` // vision content; not persisted to DB, only for LLM API
+}
+
+type ImageData struct {
+	Base64   string
+	MimeType string
 }
 
 type ToolCall struct {
@@ -69,11 +75,68 @@ type LLMResponse struct {
 }
 
 type chatRequest struct {
-	Model    string    `json:"model"`
-	Messages []Message `json:"messages"`
-	Tools    []ToolDef `json:"tools,omitempty"`
-	Stream   bool      `json:"stream"`
-	MaxTokens int     `json:"max_tokens,omitempty"`
+	Model     string          `json:"model"`
+	Messages  json.RawMessage `json:"messages"`
+	Tools     []ToolDef       `json:"tools,omitempty"`
+	Stream    bool            `json:"stream"`
+	MaxTokens int             `json:"max_tokens,omitempty"`
+}
+
+// apiMessage is the wire format for LLM API messages, supporting multimodal content.
+type apiMessage struct {
+	Role       string      `json:"role"`
+	Content    interface{} `json:"content"`
+	ToolCalls  []ToolCall  `json:"tool_calls,omitempty"`
+	ToolCallID string      `json:"tool_call_id,omitempty"`
+}
+
+type contentPart struct {
+	Type     string    `json:"type"`
+	Text     string    `json:"text,omitempty"`
+	ImageURL *imageURL `json:"image_url,omitempty"`
+}
+
+type imageURL struct {
+	URL    string `json:"url"`
+	Detail string `json:"detail,omitempty"`
+}
+
+// messagesToAPI converts internal Messages to API wire format,
+// expanding multimodal content when Images are present.
+func messagesToAPI(msgs []Message) json.RawMessage {
+	apiMsgs := make([]apiMessage, 0, len(msgs))
+	for _, m := range msgs {
+		am := apiMessage{
+			Role:       m.Role,
+			ToolCalls:  m.ToolCalls,
+			ToolCallID: m.ToolCallID,
+		}
+
+		if len(m.Images) > 0 {
+			// Multimodal: content is array of parts
+			parts := []contentPart{}
+			if m.Content != nil && *m.Content != "" {
+				parts = append(parts, contentPart{Type: "text", Text: *m.Content})
+			}
+			for _, img := range m.Images {
+				parts = append(parts, contentPart{
+					Type: "image_url",
+					ImageURL: &imageURL{
+						URL:    fmt.Sprintf("data:%s;base64,%s", img.MimeType, img.Base64),
+						Detail: "low",
+					},
+				})
+			}
+			am.Content = parts
+		} else if m.Content != nil {
+			am.Content = *m.Content
+		}
+
+		apiMsgs = append(apiMsgs, am)
+	}
+
+	b, _ := json.Marshal(apiMsgs)
+	return b
 }
 
 type streamDelta struct {
@@ -121,7 +184,7 @@ func CallLLM(cfg *Config, messages []Message, tools []ToolDef, onToken func(stri
 func callOpenAI(provider *ProviderConfig, model string, messages []Message, tools []ToolDef, onToken func(string), onThinking func(string)) (*LLMResponse, error) {
 	body, err := json.Marshal(chatRequest{
 		Model:     model,
-		Messages:  messages,
+		Messages:  messagesToAPI(messages),
 		Tools:     tools,
 		Stream:    true,
 		MaxTokens: 16384,

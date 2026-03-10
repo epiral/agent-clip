@@ -1,169 +1,119 @@
 @import "tailwindcss";
+@import "streamdown/styles.css";
+@source "../node_modules/streamdown/dist/*.js";
+@source "../node_modules/@streamdown/code/dist/*.js";
+@source "../node_modules/@streamdown/cjk/dist/*.js";
+@source "../node_modules/@streamdown/math/dist/*.js";
+@source "../node_modules/@streamdown/mermaid/dist/*.js";
+@import "@fontsource/inter/300.css";
 @import "@fontsource/inter/400.css";
 @import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/inter/700.css";
 @import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
 
-/* 注入字体集 + Light Mode Tokens (默认) */
-/* 中文用系统原生字体 PingFang SC，渲染无锯齿 */
 @theme {
   --font-sans: "Inter", -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   --font-mono: "JetBrains Mono", monospace;
 
-  --radius: 0.5rem;
+  /* Colors - Light (OKLCH) */
+  --color-bg-base: oklch(98% 0.005 240);
+  --color-bg-sidebar: oklch(96.5% 0.008 240);
+  --color-bg-surface: oklch(100% 0 0);
+  --color-brand-primary: oklch(60% 0.12 250);
+  --color-text-main: oklch(28% 0.01 240);
+  --color-text-mute: oklch(55% 0.01 240);
+  --color-border-subtle: oklch(90% 0.01 240);
 
-  --color-background: oklch(0.99 0.005 250);
-  --color-foreground: oklch(0.18 0.01 250);
+  /* Shadcn-like compatibility mapping */
+  --color-background: var(--color-bg-base);
+  --color-foreground: var(--color-text-main);
+  --color-card: var(--color-bg-surface);
+  --color-card-foreground: var(--color-text-main);
+  --color-popover: var(--color-bg-surface);
+  --color-popover-foreground: var(--color-text-main);
+  --color-primary: var(--color-brand-primary);
+  --color-primary-foreground: oklch(100% 0 0);
+  --color-secondary: oklch(94% 0.01 240);
+  --color-secondary-foreground: var(--color-text-main);
+  --color-muted: oklch(94% 0.01 240);
+  --color-muted-foreground: var(--color-text-mute);
+  --color-accent: oklch(94% 0.01 240);
+  --color-accent-foreground: var(--color-text-main);
+  --color-destructive: oklch(60% 0.15 25);
+  --color-destructive-foreground: oklch(98% 0.01 240);
+  --color-border: var(--color-border-subtle);
+  --color-input: var(--color-border-subtle);
+  --color-ring: var(--color-brand-primary);
+  
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
 
-  --color-card: oklch(0.98 0.005 250);
-  --color-card-foreground: oklch(0.18 0.01 250);
-
-  --color-popover: oklch(1 0 0);
-  --color-popover-foreground: oklch(0.18 0.01 250);
-
-  --color-primary: oklch(0.2 0.01 250);
-  --color-primary-foreground: oklch(0.98 0.005 250);
-
-  --color-secondary: oklch(0.95 0.005 250);
-  --color-secondary-foreground: oklch(0.25 0.01 250);
-
-  --color-muted: oklch(0.96 0.005 250);
-  --color-muted-foreground: oklch(0.5 0.01 250);
-
-  --color-accent: oklch(0.94 0.005 250);
-  --color-accent-foreground: oklch(0.2 0.01 250);
-
-  --color-destructive: oklch(0.6 0.2 25);
-  --color-destructive-foreground: oklch(0.98 0.005 250);
-
-  --color-success: oklch(0.65 0.15 150);
-
-  --color-border: oklch(0.92 0.005 250);
-  --color-input: oklch(0.92 0.005 250);
-  --color-ring: oklch(0.8 0.01 250);
-
-  --color-sidebar: oklch(0.97 0.005 250);
-  --color-sidebar-foreground: oklch(0.25 0.01 250);
-  --color-sidebar-primary: oklch(0.2 0.01 250);
-  --color-sidebar-primary-foreground: oklch(0.98 0.005 250);
-  --color-sidebar-accent: oklch(0.93 0.005 250);
-  --color-sidebar-accent-foreground: oklch(0.2 0.01 250);
-  --color-sidebar-border: oklch(0.92 0.005 250);
-  --color-sidebar-ring: oklch(0.8 0.01 250);
+  --shadow-tactile: 0 4px 30px rgba(0, 0, 0, 0.08);
+  --shadow-glow: 0 0 8px var(--color-brand-primary);
 }
 
-/* Dark Mode — 用 CSS 变量覆盖 @theme 定义的 token */
 @media (prefers-color-scheme: dark) {
   :root {
-    --color-background: oklch(0.14 0.005 250);
-    --color-foreground: oklch(0.95 0.005 250);
+    --color-bg-base: oklch(16% 0.01 240);
+    --color-bg-sidebar: oklch(13% 0.01 240);
+    --color-bg-surface: oklch(20% 0.01 240);
+    --color-brand-primary: oklch(68% 0.10 250);
+    --color-text-main: oklch(90% 0.005 240);
+    --color-text-mute: oklch(58% 0.01 240);
+    --color-border-subtle: oklch(24% 0.01 240);
 
-    --color-card: oklch(0.16 0.005 250);
-    --color-card-foreground: oklch(0.95 0.005 250);
-
-    --color-popover: oklch(0.15 0.005 250);
-    --color-popover-foreground: oklch(0.95 0.005 250);
-
-    --color-primary: oklch(0.95 0.005 250);
-    --color-primary-foreground: oklch(0.15 0.005 250);
-
-    --color-secondary: oklch(0.2 0.005 250);
-    --color-secondary-foreground: oklch(0.9 0.005 250);
-
-    --color-muted: oklch(0.18 0.005 250);
-    --color-muted-foreground: oklch(0.65 0.005 250);
-
-    --color-accent: oklch(0.22 0.005 250);
-    --color-accent-foreground: oklch(0.95 0.005 250);
-
-    --color-destructive: oklch(0.45 0.18 25);
-    --color-destructive-foreground: oklch(0.95 0.005 250);
-
-    --color-success: oklch(0.5 0.15 150);
-
-    --color-border: oklch(0.22 0.005 250);
-    --color-input: oklch(0.22 0.005 250);
-    --color-ring: oklch(0.35 0.005 250);
-
-    --color-sidebar: oklch(0.12 0.005 250);
-    --color-sidebar-foreground: oklch(0.8 0.005 250);
-    --color-sidebar-primary: oklch(0.95 0.005 250);
-    --color-sidebar-primary-foreground: oklch(0.15 0.005 250);
-    --color-sidebar-accent: oklch(0.18 0.005 250);
-    --color-sidebar-accent-foreground: oklch(0.95 0.005 250);
-    --color-sidebar-border: oklch(0.18 0.005 250);
-    --color-sidebar-ring: oklch(0.35 0.005 250);
+    --color-primary-foreground: oklch(16% 0.01 240);
+    --shadow-tactile: 0 4px 30px rgba(0, 0, 0, 0.3);
   }
 }
 
-/* 基础样式重置与全局设定 */
 @layer base {
   :root {
     color-scheme: light dark;
   }
   * {
-    @apply border-border;
+    @apply border-border/40;
   }
   body {
-    @apply bg-background text-foreground font-sans antialiased selection:bg-primary/20;
-    overscroll-behavior-y: none;
-  }
-
-  ::-webkit-scrollbar {
-    width: 4px;
-    height: 4px;
-  }
-  ::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  ::-webkit-scrollbar-thumb {
-    @apply bg-muted-foreground/30 rounded-full;
-  }
-  ::-webkit-scrollbar-thumb:hover {
-    @apply bg-muted-foreground/50;
+    @apply bg-bg-base text-text-main font-sans antialiased;
+    font-size: 14px;
+    line-height: 1.6;
+    letter-spacing: -0.01em;
   }
 }
 
 @layer utilities {
+  .glass-sidebar {
+    @apply bg-bg-sidebar/80 backdrop-blur-xl border-r border-border/40;
+  }
+
+  .animate-in-up {
+    animation: slide-up-fade 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  @keyframes slide-up-fade {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .spring-expand {
+    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
   .prose {
-    @apply text-foreground/90 leading-relaxed;
+    @apply text-text-main;
+    line-height: 1.65;
   }
   .prose p {
-    @apply mb-4 leading-relaxed;
-  }
-  .prose p:last-child {
-    @apply mb-0;
-  }
-  .prose a {
-    @apply text-primary hover:underline font-medium;
-  }
-  .prose h1, .prose h2, .prose h3, .prose h4 {
-    @apply font-semibold mt-8 mb-4 text-foreground tracking-tight;
-  }
-  .prose h1 { @apply text-2xl; }
-  .prose h2 { @apply text-xl; }
-  .prose h3 { @apply text-lg; }
-  .prose ul { @apply list-disc pl-5 mb-4 space-y-1; }
-  .prose ol { @apply list-decimal pl-5 mb-4 space-y-1; }
-  .prose li > p { @apply mb-1; }
-  .prose code {
-    @apply font-mono text-[0.85em] bg-muted/80 px-1.5 py-0.5 rounded-md text-foreground font-medium;
-  }
-  .prose pre {
-    @apply bg-muted/50 border border-border/50 p-4 rounded-xl overflow-x-auto mb-4 text-sm shadow-sm;
-  }
-  .prose pre code {
-    @apply bg-transparent p-0 text-inherit text-[0.875em];
-  }
-  .prose blockquote {
-    @apply border-l-4 border-muted-foreground/30 pl-4 italic text-muted-foreground mb-4;
-  }
-  .prose table {
-    @apply w-full text-left border-collapse mb-4;
-  }
-  .prose th, .prose td {
-    @apply border border-border px-3 py-2;
-  }
-  .prose th {
-    @apply bg-muted/50 font-semibold;
+    @apply mb-3;
   }
 }

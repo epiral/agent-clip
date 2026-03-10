@@ -110,10 +110,11 @@ func CreateTopic(db *sql.DB, name string) (*Topic, error) {
 }
 
 type TopicSummary struct {
-	ID           string `json:"id"`
-	Name         string `json:"name"`
-	MessageCount int    `json:"message_count"`
-	CreatedAt    int64  `json:"created_at"`
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	MessageCount  int    `json:"message_count"`
+	CreatedAt     int64  `json:"created_at"`
+	LastMessageAt int64  `json:"last_message_at"`
 }
 
 func CountTopics(db *sql.DB) (int, error) {
@@ -128,11 +129,12 @@ func ListTopics(db *sql.DB) ([]TopicSummary, error) {
 
 func ListTopicsPage(db *sql.DB, limit, offset int) ([]TopicSummary, error) {
 	query := `
-		SELECT t.id, t.name, t.created_at, COUNT(m.id) as msg_count
+		SELECT t.id, t.name, t.created_at, COUNT(m.id) as msg_count,
+		       COALESCE(MAX(m.created_at), t.created_at) as last_msg_at
 		FROM topics t
 		LEFT JOIN messages m ON m.topic_id = t.id
 		GROUP BY t.id
-		ORDER BY t.created_at DESC`
+		ORDER BY last_msg_at DESC`
 
 	var rows *sql.Rows
 	var err error
@@ -149,7 +151,7 @@ func ListTopicsPage(db *sql.DB, limit, offset int) ([]TopicSummary, error) {
 	var topics []TopicSummary
 	for rows.Next() {
 		var t TopicSummary
-		if err := rows.Scan(&t.ID, &t.Name, &t.CreatedAt, &t.MessageCount); err != nil {
+		if err := rows.Scan(&t.ID, &t.Name, &t.CreatedAt, &t.MessageCount, &t.LastMessageAt); err != nil {
 			return nil, fmt.Errorf("scan topic: %w", err)
 		}
 		topics = append(topics, t)

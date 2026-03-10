@@ -1,9 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useImperativeHandle, forwardRef } from "react";
 import type { ChatMessage } from "../lib/types";
 import { MessageBubble } from "./MessageBubble";
 
-import { ArrowDown, Code, Sparkles, Binary, PenSquare } from "lucide-react";
-import { Button } from "./ui/button";
+import { Code, Sparkles, Binary, PenSquare } from "lucide-react";
 import { useI18n } from "../lib/i18n";
 
 interface MessageListProps {
@@ -11,9 +10,15 @@ interface MessageListProps {
   isStreaming: boolean;
   onSendPrompt?: (msg: string) => void;
   agentName?: string;
+  onScrollButtonChange?: (show: boolean) => void;
 }
 
-export function MessageList({ messages, isStreaming, onSendPrompt, agentName }: MessageListProps) {
+export interface MessageListHandle {
+  scrollToBottom: () => void;
+  showScrollButton: boolean;
+}
+
+export const MessageList = forwardRef<MessageListHandle, MessageListProps>(function MessageList({ messages, isStreaming, onSendPrompt, agentName, onScrollButtonChange }, ref) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [userHasScrolledUp, setUserHasScrolledUp] = useState(false);
@@ -32,6 +37,11 @@ export function MessageList({ messages, isStreaming, onSendPrompt, agentName }: 
     }
   };
 
+  useImperativeHandle(ref, () => ({
+    scrollToBottom,
+    showScrollButton,
+  }), [showScrollButton]);
+
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
     const distanceToBottom = scrollHeight - scrollTop - clientHeight;
@@ -40,9 +50,11 @@ export function MessageList({ messages, isStreaming, onSendPrompt, agentName }: 
     if (distanceToBottom > 50) {
       setUserHasScrolledUp(true);
       setShowScrollButton(true);
+      onScrollButtonChange?.(true);
     } else {
       setUserHasScrolledUp(false);
       setShowScrollButton(false);
+      onScrollButtonChange?.(false);
     }
   };
 
@@ -72,40 +84,50 @@ export function MessageList({ messages, isStreaming, onSendPrompt, agentName }: 
   return (
     <div className="flex-1 relative overflow-hidden flex flex-col h-full bg-transparent">
       {messages.length === 0 ? (
-        <div className="flex-1 flex flex-col items-center justify-center p-8 h-full max-w-3xl mx-auto w-full">
-          <div className="w-16 h-16 bg-primary/10 text-primary rounded-2xl flex items-center justify-center mb-6 shadow-sm border border-primary/20">
-             <Sparkles className="w-8 h-8" />
+        <div className="flex-1 flex flex-col items-center justify-center p-8 h-full w-full animate-in-up">
+          <div className="mb-16 text-center">
+            <h2 className="text-[28px] font-light tracking-[-0.03em] text-text-main mb-3 leading-tight">
+              {t("How can I help you today?")}
+            </h2>
+            <p className="text-text-mute text-[14px] font-medium tracking-tight opacity-50 uppercase tracking-[0.1em]">{t("Select an instrumental task")}</p>
           </div>
-          <h2 className="text-2xl font-semibold mb-8">{t("No messages yet")}</h2>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-2xl">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-[640px] px-6">
             <button 
               onClick={() => onSendPrompt?.(t("Summarize text"))}
-              className="flex flex-col items-start p-4 bg-background rounded-xl border border-border shadow-sm hover:shadow-md hover:border-primary/50 transition-all text-left group"
+              className="flex items-center gap-3 h-[60px] px-4 bg-bg-surface rounded-lg border border-border/40 hover:bg-bg-base hover:border-text-main/20 transition-all text-left group shadow-sm"
             >
-              <PenSquare className="w-5 h-5 mb-2 text-muted-foreground group-hover:text-primary transition-colors" />
-              <span className="font-medium">{t("Summarize text")}</span>
+              <div className="w-8 h-8 rounded-md bg-muted/40 flex items-center justify-center group-hover:bg-muted transition-colors border border-border/10">
+                <PenSquare className="w-4 h-4 text-text-mute group-hover:text-text-main transition-all" />
+              </div>
+              <span className="font-semibold text-[13px] tracking-tight text-text-main/90">{t("Summarize text")}</span>
             </button>
             <button 
               onClick={() => onSendPrompt?.(t("Write code"))}
-              className="flex flex-col items-start p-4 bg-background rounded-xl border border-border shadow-sm hover:shadow-md hover:border-primary/50 transition-all text-left group"
+              className="flex items-center gap-3 h-[60px] px-4 bg-bg-surface rounded-lg border border-border/40 hover:bg-bg-base hover:border-text-main/20 transition-all text-left group shadow-sm"
             >
-              <Code className="w-5 h-5 mb-2 text-muted-foreground group-hover:text-primary transition-colors" />
-              <span className="font-medium">{t("Write code")}</span>
+              <div className="w-8 h-8 rounded-md bg-muted/40 flex items-center justify-center group-hover:bg-muted transition-colors border border-border/10">
+                <Code className="w-4 h-4 text-text-mute group-hover:text-text-main transition-all" />
+              </div>
+              <span className="font-semibold text-[13px] tracking-tight text-text-main/90">{t("Write code")}</span>
             </button>
             <button 
               onClick={() => onSendPrompt?.(t("Analyze data"))}
-              className="flex flex-col items-start p-4 bg-background rounded-xl border border-border shadow-sm hover:shadow-md hover:border-primary/50 transition-all text-left group"
+              className="flex items-center gap-3 h-[60px] px-4 bg-bg-surface rounded-lg border border-border/40 hover:bg-bg-base hover:border-text-main/20 transition-all text-left group shadow-sm"
             >
-              <Binary className="w-5 h-5 mb-2 text-muted-foreground group-hover:text-primary transition-colors" />
-              <span className="font-medium">{t("Analyze data")}</span>
+              <div className="w-8 h-8 rounded-md bg-muted/40 flex items-center justify-center group-hover:bg-muted transition-colors border border-border/10">
+                <Binary className="w-4 h-4 text-text-mute group-hover:text-text-main transition-all" />
+              </div>
+              <span className="font-semibold text-[13px] tracking-tight text-text-main/90">{t("Analyze data")}</span>
             </button>
             <button 
               onClick={() => onSendPrompt?.(t("Run sandbox"))}
-              className="flex flex-col items-start p-4 bg-background rounded-xl border border-border shadow-sm hover:shadow-md hover:border-primary/50 transition-all text-left group"
+              className="flex items-center gap-3 h-[60px] px-4 bg-bg-surface rounded-lg border border-border/40 hover:bg-bg-base hover:border-text-main/20 transition-all text-left group shadow-sm"
             >
-              <Sparkles className="w-5 h-5 mb-2 text-muted-foreground group-hover:text-primary transition-colors" />
-              <span className="font-medium">{t("Run sandbox")}</span>
+              <div className="w-8 h-8 rounded-md bg-muted/40 flex items-center justify-center group-hover:bg-muted transition-colors border border-border/10">
+                <Sparkles className="w-4 h-4 text-text-mute group-hover:text-text-main transition-all" />
+              </div>
+              <span className="font-semibold text-[13px] tracking-tight text-text-main/90">{t("Run sandbox")}</span>
             </button>
           </div>
         </div>
@@ -113,9 +135,9 @@ export function MessageList({ messages, isStreaming, onSendPrompt, agentName }: 
         <div 
           ref={scrollRef}
           onScroll={handleScroll}
-          className="flex-1 overflow-y-auto w-full h-full"
+          className="flex-1 overflow-y-auto w-full h-full scrollbar-thin scrollbar-thumb-brand-primary/10 scrollbar-track-transparent"
         >
-          <div className="pb-4 min-h-full">
+          <div className="pb-32 pt-6 min-h-full space-y-2">
             {messages.map((msg) => (
               <MessageBubble key={msg.id} message={msg} agentName={agentName} />
             ))}
@@ -123,18 +145,6 @@ export function MessageList({ messages, isStreaming, onSendPrompt, agentName }: 
         </div>
       )}
 
-      {showScrollButton && (
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10">
-          <Button
-            variant="secondary"
-            size="icon"
-            className="rounded-full shadow-md w-8 h-8 opacity-80 hover:opacity-100"
-            onClick={scrollToBottom}
-          >
-            <ArrowDown className="h-4 w-4" />
-          </Button>
-        </div>
-      )}
     </div>
   );
-}
+});

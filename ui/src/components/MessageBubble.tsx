@@ -1,9 +1,40 @@
 import type { ChatMessage, MessageBlock } from "../lib/types";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { Streamdown, defaultRehypePlugins } from "streamdown";
+import { harden } from "rehype-harden";
+import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
+import { code } from "@streamdown/code";
+import { cjk } from "@streamdown/cjk";
+import { math } from "@streamdown/math";
+import { mermaid } from "@streamdown/mermaid";
+import "katex/dist/katex.min.css";
 import { ThinkingBlock } from "./ThinkingBlock";
 import { ToolCallBlock } from "./ToolCallBlock";
 import { useI18n } from "../lib/i18n";
+
+// Extend rehype-sanitize schema to allow pinix-data:// and pinix-web:// on img src
+const sanitizeSchema: typeof defaultSchema = {
+  ...defaultSchema,
+  protocols: {
+    ...defaultSchema.protocols,
+    src: [...(defaultSchema.protocols?.src || []), "pinix-data", "pinix-web"],
+  },
+  attributes: {
+    ...defaultSchema.attributes,
+    code: [...((defaultSchema.attributes?.code as string[]) || []), "metastring"],
+  },
+};
+
+const customRehypePlugins: any[] = [
+  defaultRehypePlugins.raw,
+  [rehypeSanitize, sanitizeSchema],
+  [harden, {
+    allowedImagePrefixes: ["*"],
+    allowedLinkPrefixes: ["*"],
+    allowedProtocols: ["*"],
+    defaultOrigin: undefined,
+    allowDataImages: true,
+  }],
+];
 
 interface MessageBubbleProps {
   message: ChatMessage;
@@ -16,12 +47,17 @@ export function MessageBubble({ message, agentName }: MessageBubbleProps) {
   const isStreaming = message.status === "streaming";
 
   return (
-    <div className={`w-full text-foreground ${isUser ? "bg-muted/30" : ""}`}>
-      <div className="p-4 max-w-3xl mx-auto md:px-6 md:py-5">
-        <div className="mb-1.5">
-          <span className="text-[11px] font-semibold tracking-wide uppercase text-muted-foreground">
-            {isUser ? t("you") : (agentName || "Clip")}
+    <div className={`w-full py-3 px-4 md:px-6 transition-all duration-300 animate-in-up border-l-2 ${isUser ? 'border-text-main/10' : 'border-transparent'}`}>
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center gap-2">
+          <span className={`text-[11px] tracking-tight ${isUser ? 'text-text-main font-bold' : 'text-text-mute font-semibold'}`}>
+            {isUser ? t("YOU") : (agentName || "AGENT")}
           </span>
+          {!isUser && isStreaming && (
+            <span className="text-[10px] text-brand-primary font-medium animate-pulse">
+              {t("Responding...")}
+            </span>
+          )}
         </div>
 
         <div className="w-full space-y-3 overflow-hidden min-w-0">
@@ -35,16 +71,14 @@ export function MessageBubble({ message, agentName }: MessageBubbleProps) {
           ))}
 
           {isStreaming && message.blocks.length === 0 && (
-            <span className="text-muted-foreground animate-pulse flex h-6 items-center gap-1">
-              <span className="w-1.5 h-1.5 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-              <span className="w-1.5 h-1.5 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-              <span className="w-1.5 h-1.5 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
-            </span>
+            <div className="flex h-4 items-center gap-1.5 ml-1">
+              <span className="w-1 h-1 bg-brand-primary/60 rounded-full animate-pulse" />
+            </div>
           )}
 
           {message.status === "error" && (
-            <div className="text-destructive text-sm mt-2 p-3 bg-destructive/10 rounded-md border border-destructive/20">
-              {message.blocks.find(b => b.type === "text")?.content || "An error occurred."}
+            <div className="text-destructive text-[13px] p-3 bg-destructive/5 border border-destructive/10 rounded-md">
+              {message.blocks.find(b => b.type === "text")?.content || "An error occurred during generation."}
             </div>
           )}
         </div>
@@ -60,8 +94,6 @@ function BlockRenderer({ block, isStreaming, isLastBlock }: {
 }) {
   switch (block.type) {
     case "thinking":
-      // A thinking block is only "actively streaming" if the message is streaming
-      // AND this is the last block (no subsequent tool_call/text has appeared yet)
       return (
         <ThinkingBlock
           content={block.content}
@@ -79,10 +111,14 @@ function BlockRenderer({ block, isStreaming, isLastBlock }: {
       );
     case "text":
       return block.content ? (
-        <div className="prose prose-sm md:prose-base dark:prose-invert max-w-none break-words">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+        <div className="max-w-none break-words selection:bg-brand-primary/20">
+          <Streamdown
+            plugins={{ code, cjk, math, mermaid }}
+            rehypePlugins={customRehypePlugins}
+            isAnimating={isStreaming && isLastBlock}
+          >
             {block.content}
-          </ReactMarkdown>
+          </Streamdown>
         </div>
       ) : null;
   }

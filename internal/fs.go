@@ -174,8 +174,7 @@ func fsWrite(args []string, stdin string) (string, error) {
 	result := fmt.Sprintf("Written %s → %s", size, path)
 
 	if isImageFile(path) {
-		url := pinixDataURLPrefix + path
-		result += fmt.Sprintf("\n%s", url)
+		result += fmt.Sprintf("\nRender: ![image](%s%s)", pinixDataURLPrefix, path)
 	}
 
 	return result, nil

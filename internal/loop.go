@@ -2,8 +2,12 @@ package internal
 
 import (
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -73,6 +77,8 @@ func RunLoop(cfg *Config, ctx *ContextResult, registry *Registry, out Output, rc
 				result := execToolCall(registry, tc)
 				out.ToolResult(result)
 				toolResult := ToolResultMessage(tc.ID, result)
+				// Auto-attach vision data for images referenced in tool results
+				toolResult.Images = extractImagesFromResult(result)
 				context = append(context, toolResult)
 				newMsgs = append(newMsgs, toolResult)
 			}
@@ -137,6 +143,51 @@ func execToolCall(registry *Registry, tc ToolCall) string {
 	}
 
 	return registry.Exec(args.Command, args.Stdin)
+}
+
+// pinixDataURLRe matches pinix-data://local/data/images/xxx.png paths in tool results
+var pinixDataURLRe = regexp.MustCompile(`pinix-data://local/data/(images/[^\s)]+)`)
+
+// extractImagesFromResult scans a tool result for pinix-data:// image URLs,
+// reads the corresponding files from data/, and returns ImageData for vision.
+func extractImagesFromResult(result string) []ImageData {
+	matches := pinixDataURLRe.FindAllStringSubmatch(result, -1)
+	if len(matches) == 0 {
+		return nil
+	}
+
+	var images []ImageData
+	for _, m := range matches {
+		relPath := m[1] // e.g., "images/screenshot-xxx.png"
+		if !isImageFile(relPath) {
+			continue
+		}
+
+		absPath := filepath.Join(dataRoot(), relPath)
+		data, err := os.ReadFile(absPath)
+		if err != nil {
+			continue
+		}
+
+		// Determine MIME type
+		mime := "image/png"
+		ext := strings.ToLower(filepath.Ext(relPath))
+		switch ext {
+		case ".jpg", ".jpeg":
+			mime = "image/jpeg"
+		case ".webp":
+			mime = "image/webp"
+		case ".gif":
+			mime = "image/gif"
+		}
+
+		images = append(images, ImageData{
+			Base64:   base64.StdEncoding.EncodeToString(data),
+			MimeType: mime,
+		})
+	}
+
+	return images
 }
 
 func truncate(s string, n int) string {

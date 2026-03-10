@@ -5,6 +5,7 @@ export interface Topic {
   name: string;
   message_count: number;
   created_at: number;
+  last_message_at: number;
   has_active_run?: boolean;
 }
 

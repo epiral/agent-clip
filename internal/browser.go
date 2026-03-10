@@ -2,10 +2,13 @@ package internal
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -40,6 +43,7 @@ type browserResponseData struct {
 	} `json:"snapshotData,omitempty"`
 	Value          string `json:"value,omitempty"`
 	ScreenshotPath string `json:"screenshotPath,omitempty"`
+	DataURL        string `json:"dataUrl,omitempty"`
 	Result         any    `json:"result,omitempty"`
 	Tabs           []struct {
 		Index  int    `json:"index"`
@@ -91,6 +95,47 @@ func InvokeBrowser(endpoint string, req *browserRequest) (*browserResponse, erro
 	return &result, nil
 }
 
+// saveScreenshotFromDataURL decodes a data:image/png;base64,... URL and saves to data/images/.
+func saveScreenshotFromDataURL(dataURL string) (bool, string) {
+	// Parse data URL: data:image/png;base64,<data>
+	const prefix = "base64,"
+	idx := strings.Index(dataURL, prefix)
+	if idx < 0 {
+		return false, ""
+	}
+	b64Data := dataURL[idx+len(prefix):]
+
+	data, err := base64.StdEncoding.DecodeString(b64Data)
+	if err != nil {
+		return false, ""
+	}
+
+	// Determine extension from mime type
+	ext := ".png"
+	if strings.Contains(dataURL[:idx], "jpeg") {
+		ext = ".jpg"
+	} else if strings.Contains(dataURL[:idx], "webp") {
+		ext = ".webp"
+	}
+
+	// Generate filename with timestamp
+	filename := fmt.Sprintf("screenshot-%d%s", time.Now().UnixMilli(), ext)
+	relPath := filepath.Join("images", filename)
+
+	absPath, err := resolvePath(relPath)
+	if err != nil {
+		return false, ""
+	}
+	os.MkdirAll(filepath.Dir(absPath), 0o755)
+
+	if err := os.WriteFile(absPath, data, 0o644); err != nil {
+		return false, ""
+	}
+
+	url := pinixDataURLPrefix + relPath
+	return true, url
+}
+
 // formatBrowserResult converts a browser response to a human/LLM readable string.
 func formatBrowserResult(resp *browserResponse) string {
 	if !resp.Success {
@@ -117,6 +162,12 @@ func formatBrowserResult(resp *browserResponse) string {
 	}
 	if resp.Data.ScreenshotPath != "" {
 		parts = append(parts, fmt.Sprintf("Screenshot: %s", resp.Data.ScreenshotPath))
+	}
+	// Auto-save screenshot from dataUrl to data/images/
+	if resp.Data.DataURL != "" {
+		if saved, url := saveScreenshotFromDataURL(resp.Data.DataURL); saved {
+			parts = append(parts, fmt.Sprintf("Render: ![screenshot](%s)", url))
+		}
 	}
 	if resp.Data.Result != nil {
 		b, _ := json.Marshal(resp.Data.Result)

@@ -35,47 +35,53 @@ export function ChatComposer({ onSend, onCancel, isStreaming, agentName }: ChatC
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
-      // Prevent newline on Enter, but allow Shift+Enter for newline
-      // Note: On mobile we might want to let Enter just add newline.
-      // But for a hybrid app, we usually use Enter to send unless shift is pressed.
       e.preventDefault();
       handleSend();
     }
   };
 
   return (
-    <div className="p-4 bg-transparent pb-[env(safe-area-inset-bottom)] z-10 w-full max-w-3xl mx-auto">
-      <div className="flex items-end gap-2 bg-background p-2 rounded-3xl border border-input shadow-sm focus-within:ring-4 focus-within:ring-primary/10 focus-within:border-primary/30 transition-all duration-300 hover:shadow-md">
+    <div className="w-full transition-all duration-300 ease-in-out focus-within:px-0">
+      <div className="relative group flex items-end bg-bg-surface border border-border/60 focus-within:border-brand-primary/60 rounded-xl transition-all duration-300 shadow-sm overflow-hidden">
         <Textarea
           ref={textareaRef}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={t("Ask {name} anything...", { name: agentName || "Clip" })}
-          className="min-h-[44px] max-h-[200px] resize-none border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 px-4 py-3 overflow-y-auto text-base"
+          placeholder={t("Ask {name} anything...", { name: agentName || "Agent" })}
+          className="flex-1 min-h-[52px] max-h-[200px] resize-none border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 px-4 py-4 text-[14px] leading-relaxed placeholder:text-text-mute/40 font-normal scrollbar-none transition-all"
           rows={1}
         />
-        {isStreaming ? (
-          <Button
-            size="icon"
-            variant="destructive"
-            onClick={onCancel}
-            className="shrink-0 h-[44px] w-[44px] rounded-2xl shadow-sm transition-transform active:scale-95"
-          >
-            <Square className="h-5 w-5 fill-current" />
-            <span className="sr-only">Cancel</span>
-          </Button>
-        ) : (
-          <Button
-            size="icon"
-            onClick={handleSend}
-            disabled={!input.trim()}
-            className="shrink-0 h-[44px] w-[44px] rounded-2xl bg-primary hover:bg-primary/90 shadow-sm transition-transform active:scale-95 disabled:opacity-50 disabled:active:scale-100"
-          >
-            <ArrowUp className="h-5 w-5" />
-            <span className="sr-only">{t("Send")}</span>
-          </Button>
-        )}
+        <div className="flex items-center h-[52px] px-2">
+          {isStreaming ? (
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={onCancel}
+              className="h-8 w-8 text-destructive hover:bg-destructive/10 rounded-lg transition-all"
+            >
+              <Square className="h-3 w-3 fill-current" />
+              <span className="sr-only">Cancel</span>
+            </Button>
+          ) : (
+            <Button
+              size="icon"
+              onClick={handleSend}
+              disabled={!input.trim()}
+              className={`h-8 w-8 rounded-lg transition-all duration-200 ${
+                input.trim() 
+                  ? "bg-brand-primary text-white scale-100 opacity-100 shadow-sm hover:brightness-110 active:scale-95" 
+                  : "bg-muted text-text-mute/30 scale-95 opacity-50 shadow-none"
+              }`}
+            >
+              <ArrowUp className="h-4 w-4 stroke-[2.5]" />
+              <span className="sr-only">{t("Send")}</span>
+            </Button>
+          )}
+        </div>
+      </div>
+      <div className="mt-2 text-[10px] text-center text-text-mute/30 font-medium tracking-tight opacity-0 group-focus-within:opacity-100 transition-opacity duration-300">
+        {t("Press Enter to Transmit")} · {t("Shift+Enter for multi-line")}
       </div>
     </div>
   );
