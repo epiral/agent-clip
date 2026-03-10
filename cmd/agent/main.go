@@ -243,6 +243,9 @@ func runSync(db *sql.DB, topicID, message string, attachments []string, out inte
 	_ = internal.EnsureTopicDir(topicID)
 	internal.SetCurrentTopic(topicID)
 
+	// Probe clips for auto-discovery (GetInfo RPC)
+	internal.ProbeClips(cfg)
+
 	run, err := internal.CreateRun(db, topicID, os.Getpid(), false)
 	if err != nil {
 		return err

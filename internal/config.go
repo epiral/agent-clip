@@ -28,7 +28,10 @@ type ClipConfig struct {
 	Name     string   `yaml:"name" json:"name"`
 	URL      string   `yaml:"url" json:"url"`
 	Token    string   `yaml:"token" json:"-"`
-	Commands []string `yaml:"commands,omitempty" json:"commands,omitempty"`
+	Commands []string `yaml:"commands,omitempty" json:"commands,omitempty"` // fallback if GetInfo unavailable
+
+	// Runtime: populated by ProbeClips(), not serialized
+	Manifest *ClipManifest `yaml:"-" json:"-"`
 }
 
 type BrowserConfig struct {

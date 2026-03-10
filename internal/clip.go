@@ -15,6 +15,57 @@ import (
 	"github.com/epiral/pinix/gen/go/pinix/v1/pinixv1connect"
 )
 
+// ClipManifest holds metadata discovered from a clip via GetInfo RPC.
+type ClipManifest struct {
+	Name        string
+	Description string
+	Commands    []string
+	HasWeb      bool
+}
+
+// GetClipInfo calls ClipService.GetInfo to discover clip metadata.
+func GetClipInfo(clip *ClipConfig) (*ClipManifest, error) {
+	httpClient := &http.Client{
+		Transport: &bearerTransport{
+			token: clip.Token,
+			base: &http.Transport{
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			},
+		},
+	}
+
+	client := pinixv1connect.NewClipServiceClient(httpClient, clip.URL, connect.WithGRPC())
+	resp, err := client.GetInfo(context.Background(), connect.NewRequest(&pinixv1.GetInfoRequest{}))
+	if err != nil {
+		return nil, fmt.Errorf("clip %s GetInfo: %w", clip.Name, err)
+	}
+
+	return &ClipManifest{
+		Name:        resp.Msg.GetName(),
+		Description: resp.Msg.GetDescription(),
+		Commands:    resp.Msg.GetCommands(),
+		HasWeb:      resp.Msg.GetHasWeb(),
+	}, nil
+}
+
+// ProbeClips calls GetInfo on each configured clip and populates Manifest.
+// Falls back to config Commands if GetInfo fails.
+func ProbeClips(cfg *Config) {
+	for i := range cfg.Clips {
+		clip := &cfg.Clips[i]
+		manifest, err := GetClipInfo(clip)
+		if err != nil {
+			// Fallback: build manifest from config
+			clip.Manifest = &ClipManifest{
+				Name:     clip.Name,
+				Commands: clip.Commands,
+			}
+			continue
+		}
+		clip.Manifest = manifest
+	}
+}
+
 // InvokeClip calls a clip's command via Connect-RPC (ClipService.Invoke).
 func InvokeClip(clip *ClipConfig, command string, cmdArgs []string, stdin string) (string, error) {
 	httpClient := &http.Client{
@@ -82,30 +133,24 @@ func (t *bearerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 // RegisterClipCommands adds the "clip" command to the registry.
 func RegisterClipCommands(r *Registry, cfg *Config) {
 	var desc strings.Builder
-	desc.WriteString("Invoke external clips (sandboxed environments, services).\n")
+	desc.WriteString("Operate external environments (sandboxes, services).\n")
 	desc.WriteString("Usage:\n")
 	desc.WriteString("  clip list                              — list available clips\n")
-	desc.WriteString("  clip <name> <command> [args...]         — invoke (args passed directly)\n")
-	desc.WriteString("  clip <name> pull <remote-path> [name]   — pull file from clip to local data/\n")
+	desc.WriteString("  clip <name>                            — show clip details and commands\n")
+	desc.WriteString("  clip <name> <command> [args...]         — invoke a command\n")
+	desc.WriteString("  clip <name> pull <remote-path> [name]   — pull file from clip to local\n")
 	desc.WriteString("  clip <name> push <local-path> <remote>  — push local file to clip\n")
 
 	if len(cfg.Clips) > 0 {
-		desc.WriteString("\nAvailable clips:\n")
+		desc.WriteString("\nAvailable:\n")
 		for _, c := range cfg.Clips {
-			if len(c.Commands) > 0 {
-				for _, cmd := range c.Commands {
-					fmt.Fprintf(&desc, "  clip %s %s\n", c.Name, cmd)
-				}
+			m := c.Manifest
+			if m != nil && m.Description != "" {
+				fmt.Fprintf(&desc, "  %s — %s\n", c.Name, m.Description)
 			} else {
-				fmt.Fprintf(&desc, "  clip %s <command>\n", c.Name)
+				fmt.Fprintf(&desc, "  %s\n", c.Name)
 			}
 		}
-		desc.WriteString("\nExamples:\n")
-		desc.WriteString("  clip sandbox bash ls -la\n")
-		desc.WriteString("  clip sandbox bash \"echo hello && pwd\"\n")
-		desc.WriteString("  clip sandbox read /tmp/file.txt\n")
-		desc.WriteString("  clip sandbox write /tmp/file.txt \"hello world\"\n")
-		desc.WriteString("  clip sandbox edit /tmp/f.txt old new\n")
 	}
 
 	r.Register("clip", desc.String(), func(args []string, stdin string) (string, error) {
@@ -145,11 +190,19 @@ func clipList(cfg *Config) string {
 	}
 	var b strings.Builder
 	for _, c := range cfg.Clips {
-		fmt.Fprintf(&b, "  %s", c.Name)
-		if len(c.Commands) > 0 {
-			fmt.Fprintf(&b, " — commands: %s", strings.Join(c.Commands, ", "))
+		m := c.Manifest
+		if m != nil && m.Description != "" {
+			fmt.Fprintf(&b, "  %s — %s\n", c.Name, m.Description)
+			if len(m.Commands) > 0 {
+				fmt.Fprintf(&b, "    commands: %s\n", strings.Join(m.Commands, ", "))
+			}
+		} else {
+			fmt.Fprintf(&b, "  %s", c.Name)
+			if len(c.Commands) > 0 {
+				fmt.Fprintf(&b, " — commands: %s", strings.Join(c.Commands, ", "))
+			}
+			fmt.Fprintln(&b)
 		}
-		fmt.Fprintln(&b)
 	}
 	return b.String()
 }
@@ -219,13 +272,28 @@ func clipPush(clip *ClipConfig, args []string) (string, error) {
 
 func clipInfo(clip *ClipConfig) string {
 	var b strings.Builder
+	m := clip.Manifest
+
 	fmt.Fprintf(&b, "Clip: %s\n", clip.Name)
-	fmt.Fprintf(&b, "URL:  %s\n", clip.URL)
-	if len(clip.Commands) > 0 {
-		fmt.Fprintf(&b, "Commands:\n")
-		for _, cmd := range clip.Commands {
-			fmt.Fprintf(&b, "  %s\n", cmd)
+	if m != nil && m.Description != "" {
+		fmt.Fprintf(&b, "Description: %s\n", m.Description)
+	}
+
+	// Commands from manifest (auto-discovered), fallback to config
+	commands := clip.Commands
+	if m != nil && len(m.Commands) > 0 {
+		commands = m.Commands
+	}
+	if len(commands) > 0 {
+		fmt.Fprintf(&b, "\nCommands:\n")
+		for _, cmd := range commands {
+			fmt.Fprintf(&b, "  clip %s %s\n", clip.Name, cmd)
 		}
 	}
+
+	fmt.Fprintf(&b, "\nFile transfer:\n")
+	fmt.Fprintf(&b, "  clip %s pull <remote-path> [local-name]\n", clip.Name)
+	fmt.Fprintf(&b, "  clip %s push <local-path> <remote-path>\n", clip.Name)
+	fmt.Fprintf(&b, "\nUse 'clip %s <command> --help' for detailed flags.\n", clip.Name)
 	return b.String()
 }

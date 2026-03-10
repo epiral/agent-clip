@@ -35,6 +35,13 @@ user 消息包含 XML 标签：
 
 优先级：<user>（必须响应）> 近期完整对话 > <recall>（参考）> <environment>（能力边界）
 
+## 外部环境 (Clips)
+
+通过 ` + "`clip <name> <command>`" + ` 操作外部沙箱、服务器等环境。
+- ` + "`clip <name>`" + ` — 查看环境详情和所有可用命令
+- ` + "`clip <name> pull <remote>`" + ` / ` + "`clip <name> push <local> <remote>`" + ` — 文件传输
+首次使用某环境时，先运行 ` + "`clip <name>`" + ` 了解能力边界。
+
 ## 输出格式
 
 - **数学公式**用 KaTeX 语法：行内 $E=mc^2$，独立行 $$\int_0^1 f(x)dx$$（渲染引擎为 KaTeX，勿用不兼容语法）
@@ -167,12 +174,17 @@ func buildEnvironment(cfg *Config, db *sql.DB) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "<time>%s</time>\n", time.Now().Format("2006-01-02 15:04:05 MST"))
 
-	// list connected clips
+	// list connected clips (from manifest if available)
 	if len(cfg.Clips) > 0 {
 		b.WriteString("<clips>\n")
 		for _, c := range cfg.Clips {
-			cmds := strings.Join(c.Commands, ", ")
-			fmt.Fprintf(&b, "  <clip name=%q commands=%q />\n", c.Name, cmds)
+			m := c.Manifest
+			if m != nil && m.Description != "" {
+				fmt.Fprintf(&b, "  <clip name=%q>%s</clip>\n", c.Name, m.Description)
+			} else {
+				cmds := strings.Join(c.Commands, ", ")
+				fmt.Fprintf(&b, "  <clip name=%q commands=%q />\n", c.Name, cmds)
+			}
 		}
 		b.WriteString("</clips>\n")
 	}
