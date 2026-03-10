@@ -161,18 +161,12 @@ func clipPull(clip *ClipConfig, args []string) (string, error) {
 	}
 	remotePath := args[0]
 
-	// Determine local filename
+	// Determine local filename — saved to current topic directory
 	localName := filepath.Base(remotePath)
 	if len(args) > 1 {
 		localName = args[1]
 	}
-
-	// Ensure it goes to images/ for image files, otherwise files/
-	subDir := "files"
-	if isImageFile(localName) {
-		subDir = "images"
-	}
-	localRel := filepath.Join(subDir, localName)
+	localRel := localName
 
 	// Try read-b64 first (binary-safe), fallback to read (text)
 	b64Data, err := InvokeClip(clip, "read-b64", []string{remotePath}, "")
@@ -192,8 +186,9 @@ func clipPull(clip *ClipConfig, args []string) (string, error) {
 			return "", fmt.Errorf("write: %w", err)
 		}
 		result := fmt.Sprintf("Pulled %s:%s → %s (%s)", clip.Name, remotePath, localRel, humanSize(int64(len(textData))))
-		if isImageFile(localRel) {
-			result += fmt.Sprintf("\nRender: ![image](%s%s)", pinixDataURLPrefix, localRel)
+		if IsImageFile(localRel) {
+			relForURL := resolvePathToRelative(localRel)
+			result += fmt.Sprintf("\nRender: ![image](%s%s)", pinixDataURLPrefix, relForURL)
 		}
 		return result, nil
 	}
@@ -214,8 +209,9 @@ func clipPull(clip *ClipConfig, args []string) (string, error) {
 	}
 
 	result := fmt.Sprintf("Pulled %s:%s → %s (%s)", clip.Name, remotePath, localRel, humanSize(int64(len(data))))
-	if isImageFile(localRel) {
-		result += fmt.Sprintf("\nRender: ![image](%s%s)", pinixDataURLPrefix, localRel)
+	if IsImageFile(localRel) {
+		relForURL := resolvePathToRelative(localRel)
+		result += fmt.Sprintf("\nRender: ![image](%s%s)", pinixDataURLPrefix, relForURL)
 	}
 	return result, nil
 }

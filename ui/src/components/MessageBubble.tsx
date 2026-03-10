@@ -4,7 +4,7 @@ import { harden } from "rehype-harden";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import { code } from "@streamdown/code";
 import { cjk } from "@streamdown/cjk";
-import { math } from "@streamdown/math";
+import { createMathPlugin } from "@streamdown/math";
 import { mermaid } from "@streamdown/mermaid";
 import "katex/dist/katex.min.css";
 import { ThinkingBlock } from "./ThinkingBlock";
@@ -23,6 +23,8 @@ const sanitizeSchema: typeof defaultSchema = {
     code: [...((defaultSchema.attributes?.code as string[]) || []), "metastring"],
   },
 };
+
+const math = createMathPlugin({ singleDollarTextMath: true });
 
 const customRehypePlugins: any[] = [
   defaultRehypePlugins.raw,
@@ -108,6 +110,16 @@ function BlockRenderer({ block, isStreaming, isLastBlock }: {
           result={block.result}
           isStreaming={block.status === "running"}
         />
+      );
+    case "image":
+      return (
+        <div className="inline-block">
+          <img
+            src={block.url}
+            alt={block.name}
+            className="max-h-64 max-w-full rounded-lg border border-border/30 object-contain"
+          />
+        </div>
       );
     case "text":
       return block.content ? (

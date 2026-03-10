@@ -145,8 +145,8 @@ func execToolCall(registry *Registry, tc ToolCall) string {
 	return registry.Exec(args.Command, args.Stdin)
 }
 
-// pinixDataURLRe matches pinix-data://local/data/images/xxx.png paths in tool results
-var pinixDataURLRe = regexp.MustCompile(`pinix-data://local/data/(images/[^\s)]+)`)
+// pinixDataURLRe matches pinix-data://local/data/... paths in tool results
+var pinixDataURLRe = regexp.MustCompile(`pinix-data://local/data/((?:topics/[^/]+/|images/)[^\s)]+)`)
 
 // extractImagesFromResult scans a tool result for pinix-data:// image URLs,
 // reads the corresponding files from data/, and returns ImageData for vision.
@@ -159,7 +159,7 @@ func extractImagesFromResult(result string) []ImageData {
 	var images []ImageData
 	for _, m := range matches {
 		relPath := m[1] // e.g., "images/screenshot-xxx.png"
-		if !isImageFile(relPath) {
+		if !IsImageFile(relPath) {
 			continue
 		}
 

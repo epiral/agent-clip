@@ -1,18 +1,69 @@
 package internal
 
-import "strings"
+import (
+	"path/filepath"
+	"strings"
+)
 
-// ExtractUserContent strips XML wrapper from user messages,
-// returning only the <user> tag inner content.
-// Input: "<user>\nhello\n</user>\n\n<environment>...</environment>"
-// Output: "hello"
-func ExtractUserContent(content string) string {
+// ExtractUserContent strips XML wrappers from user messages,
+// returning the <user> tag inner content and any attachment paths.
+// Input: "<user>\nhello\n</user>\n\n<attachments>\n- photo.png (image, 145KB, visible)\n</attachments>\n\n<environment>...</environment>"
+// Output: "hello", ["photo.png"]
+func ExtractUserContent(content string) (string, []string) {
+	var text string
 	start := strings.Index(content, "<user>")
 	end := strings.Index(content, "</user>")
 	if start >= 0 && end > start {
-		return strings.TrimSpace(content[start+len("<user>") : end])
+		text = strings.TrimSpace(content[start+len("<user>") : end])
+	} else {
+		text = content
 	}
-	return content
+
+	attachments := extractAttachments(text)
+
+	// Strip <attachments>...</attachments> from display text
+	aStart := strings.Index(text, "<attachments>")
+	aEnd := strings.Index(text, "</attachments>")
+	if aStart >= 0 && aEnd > aStart {
+		text = strings.TrimSpace(text[:aStart] + text[aEnd+len("</attachments>"):])
+	}
+
+	return text, attachments
+}
+
+// extractAttachments parses <attachments> tag and returns file paths.
+func extractAttachments(content string) []string {
+	start := strings.Index(content, "<attachments>")
+	end := strings.Index(content, "</attachments>")
+	if start < 0 || end <= start {
+		return nil
+	}
+
+	body := content[start+len("<attachments>") : end]
+	var paths []string
+	for _, line := range strings.Split(body, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "- ") {
+			continue
+		}
+		// "- photo.png (image, 145KB, visible)" → "photo.png"
+		entry := strings.TrimPrefix(line, "- ")
+		// Take everything before the first " ("
+		if idx := strings.Index(entry, " ("); idx > 0 {
+			entry = entry[:idx]
+		}
+		entry = strings.TrimSpace(entry)
+		if entry != "" {
+			paths = append(paths, entry)
+		}
+	}
+	return paths
+}
+
+// AttachmentToURL converts a filename to a pinix-data URL for a given topic.
+func AttachmentToURL(topicID, filename string) string {
+	relPath := filepath.Join("topics", topicID, filename)
+	return "pinix-data://local/data/" + relPath
 }
 
 // ExtractThinking splits <think>...</think> from assistant content

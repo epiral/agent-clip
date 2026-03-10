@@ -119,7 +119,7 @@ export function ChatLayout() {
               </div>
             )}
             <ChatComposer
-              onSend={chat.send}
+              onSend={(msg, topicId, files) => chat.send(msg, topicId ?? chat.currentTopicId ?? undefined, files)}
               onCancel={chat.cancel}
               isStreaming={chat.isStreaming}
               agentName={agentName}

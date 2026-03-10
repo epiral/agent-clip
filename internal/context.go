@@ -34,6 +34,12 @@ user 消息包含 XML 标签：
 - <environment> — 当前状态：时间、可用工具
 
 优先级：<user>（必须响应）> 近期完整对话 > <recall>（参考）> <environment>（能力边界）
+
+## 输出格式
+
+- **数学公式**用 KaTeX 语法：行内 $E=mc^2$，独立行 $$\int_0^1 f(x)dx$$（渲染引擎为 KaTeX，勿用不兼容语法）
+- **图片**用 pinix-data 协议：![描述](pinix-data://local/data/topics/{topic-id}/filename.png)
+- **代码块**标注语言：` + "```python" + `
 `
 
 // ContextResult holds the assembled context for a new Run.

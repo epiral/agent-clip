@@ -23,6 +23,12 @@ export interface SendOptions {
   topicId?: string;
   runId?: string;
   async?: boolean;
+  attachments?: string[];
+}
+
+export interface FileAttachment {
+  file: File;
+  preview: string; // object URL for image preview
 }
 
 /** Raw message from backend get-topic */
@@ -32,6 +38,7 @@ export interface HistoryMessage {
   tool_call_id?: string;
   reasoning?: string;
   tool_calls?: { name: string; arguments: string }[];
+  attachments?: { name: string; url: string; is_image: boolean }[];
 }
 
 // ─── Block-based message model (supports interleaved thinking/tool/text) ───
@@ -39,7 +46,8 @@ export interface HistoryMessage {
 export type MessageBlock =
   | { type: "thinking"; content: string }
   | { type: "tool_call"; name: string; arguments: string; result?: string; status: "running" | "done" | "error" }
-  | { type: "text"; content: string };
+  | { type: "text"; content: string }
+  | { type: "image"; url: string; name: string };
 
 /** A single chat message for rendering */
 export interface ChatMessage {

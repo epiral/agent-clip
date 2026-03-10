@@ -9,25 +9,75 @@ import (
 	"time"
 )
 
-const pinixDataURLPrefix = "pinix-data://local/data/"
+// topicID is set per-run to scope file operations to the current topic.
+var currentTopicID string
+
+// SetCurrentTopic sets the topic context for file path resolution.
+func SetCurrentTopic(topicID string) {
+	currentTopicID = topicID
+}
+
+// TopicDir returns the absolute path to a topic's file directory.
+func TopicDir(topicID string) string {
+	return filepath.Join(dataRoot(), "topics", topicID)
+}
+
+// EnsureTopicDir creates the topic directory if it doesn't exist.
+func EnsureTopicDir(topicID string) error {
+	return os.MkdirAll(TopicDir(topicID), 0o755)
+}
 
 func dataRoot() string {
 	return filepath.Join(clipBase(), "data")
 }
 
-// resolvePath resolves a relative path to an absolute path under data/.
-// Returns error if path escapes data/.
+// resolvePath resolves a path to an absolute path.
+//   - Relative path (e.g. "notes.md") → data/topics/{currentTopicID}/notes.md
+//   - Absolute path (e.g. "/{topicID}/file.png") → data/topics/{topicID}/file.png
+//
+// Returns error if path escapes the allowed directories.
 func resolvePath(rel string) (string, error) {
 	root := dataRoot()
-	abs := filepath.Join(root, rel)
+
+	if strings.HasPrefix(rel, "/") {
+		// Absolute: /{topicID}/path → data/topics/{topicID}/path
+		trimmed := strings.TrimPrefix(rel, "/")
+		abs := filepath.Join(root, "topics", trimmed)
+		abs = filepath.Clean(abs)
+		topicsRoot := filepath.Join(root, "topics")
+		if !strings.HasPrefix(abs, topicsRoot) {
+			return "", fmt.Errorf("path escapes topics directory: %s", rel)
+		}
+		return abs, nil
+	}
+
+	// Relative: resolve under current topic
+	if currentTopicID == "" {
+		return "", fmt.Errorf("no topic context set (relative path %q requires a topic)", rel)
+	}
+	topicRoot := TopicDir(currentTopicID)
+	abs := filepath.Join(topicRoot, rel)
 	abs = filepath.Clean(abs)
-	if !strings.HasPrefix(abs, root) {
-		return "", fmt.Errorf("path escapes data directory: %s", rel)
+	if !strings.HasPrefix(abs, topicRoot) {
+		return "", fmt.Errorf("path escapes topic directory: %s", rel)
 	}
 	return abs, nil
 }
 
-func isImageFile(path string) bool {
+// resolvePathToRelative resolves and returns the path relative to data/ (for pinix-data URLs).
+func resolvePathToRelative(path string) string {
+	if strings.HasPrefix(path, "/") {
+		return "topics/" + strings.TrimPrefix(path, "/")
+	}
+	if currentTopicID != "" {
+		return filepath.Join("topics", currentTopicID, path)
+	}
+	return path
+}
+
+const pinixDataURLPrefix = "pinix-data://local/data/"
+
+func IsImageFile(path string) bool {
 	switch strings.ToLower(filepath.Ext(path)) {
 	case ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".ico", ".bmp":
 		return true
@@ -47,8 +97,9 @@ func humanSize(n int64) string {
 }
 
 func RegisterFSCommands(r *Registry) {
-	r.Register("ls", "List files. Usage: ls [dir]", fsLs)
-	r.Register("cat", "Read file content. Usage: cat <path>  Options: -b (base64 output for binary)", fsCat)
+	r.Register("ls", "List files in current topic. Usage: ls [dir]  Absolute: ls /{topic-id}/", fsLs)
+	r.Register("cat", "Read file. Usage: cat <path>  Options: -b (base64 for binary)  Absolute: cat /{topic-id}/file", fsCat)
+	r.Register("see", "View an image (auto-attaches to vision). Usage: see <path>", fsSee)
 	r.Register("write", "Write file. Usage: write <path> [content] or stdin. Options: -b (base64 stdin for binary)", fsWrite)
 	r.Register("stat", "File info. Usage: stat <path>", fsStat)
 	r.Register("rm", "Remove file. Usage: rm <path>", fsRm)
@@ -114,9 +165,39 @@ func fsCat(args []string, stdin string) (string, error) {
 	}
 
 	if b64 {
-		return base64.StdEncoding.EncodeToString(data), nil
+		result := base64.StdEncoding.EncodeToString(data)
+		// For images, also output pinix-data URL so vision auto-attach works
+		if IsImageFile(path) {
+			relPath := resolvePathToRelative(path)
+			result += fmt.Sprintf("\nRender: ![image](%s%s)", pinixDataURLPrefix, relPath)
+		}
+		return result, nil
 	}
 	return string(data), nil
+}
+
+func fsSee(args []string, stdin string) (string, error) {
+	if len(args) == 0 {
+		return "", fmt.Errorf("usage: see <image-path>")
+	}
+	path := args[0]
+
+	abs, err := resolvePath(path)
+	if err != nil {
+		return "", err
+	}
+
+	info, err := os.Stat(abs)
+	if err != nil {
+		return "", fmt.Errorf("see: %w", err)
+	}
+
+	if !IsImageFile(path) {
+		return "", fmt.Errorf("not an image file: %s (use cat to read text files)", path)
+	}
+
+	relPath := resolvePathToRelative(path)
+	return fmt.Sprintf("Image: %s (%s)\nRender: ![image](%s%s)", path, humanSize(info.Size()), pinixDataURLPrefix, relPath), nil
 }
 
 func fsWrite(args []string, stdin string) (string, error) {
@@ -148,7 +229,6 @@ func fsWrite(args []string, stdin string) (string, error) {
 
 	var data []byte
 	if b64 {
-		// Decode base64 from stdin or content
 		src := stdin
 		if src == "" && len(contentParts) > 0 {
 			src = strings.Join(contentParts, " ")
@@ -173,8 +253,9 @@ func fsWrite(args []string, stdin string) (string, error) {
 	size := humanSize(int64(len(data)))
 	result := fmt.Sprintf("Written %s → %s", size, path)
 
-	if isImageFile(path) {
-		result += fmt.Sprintf("\nRender: ![image](%s%s)", pinixDataURLPrefix, path)
+	if IsImageFile(path) {
+		relPath := resolvePathToRelative(path)
+		result += fmt.Sprintf("\nRender: ![image](%s%s)", pinixDataURLPrefix, relPath)
 	}
 
 	return result, nil
@@ -196,7 +277,7 @@ func fsStat(args []string, stdin string) (string, error) {
 	}
 
 	mime := "application/octet-stream"
-	if isImageFile(args[0]) {
+	if IsImageFile(args[0]) {
 		ext := strings.ToLower(filepath.Ext(args[0]))
 		switch ext {
 		case ".png":

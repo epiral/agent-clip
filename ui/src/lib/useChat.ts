@@ -44,10 +44,20 @@ function historyToChatMessages(history: HistoryMessage[]): ChatMessage[] {
   for (const msg of history) {
     if (msg.role === "user") {
       flushAssistant();
+      const userBlocks: MessageBlock[] = [];
+      // Add image attachments before text
+      if (msg.attachments) {
+        for (const att of msg.attachments) {
+          if (att.is_image) {
+            userBlocks.push({ type: "image", url: att.url, name: att.name });
+          }
+        }
+      }
+      userBlocks.push({ type: "text", content: msg.content ?? "" });
       chatMsgs.push({
         id: nextId(),
         role: "user",
-        blocks: [{ type: "text", content: msg.content ?? "" }],
+        blocks: userBlocks,
         status: "done",
       });
     } else if (msg.role === "assistant") {
@@ -180,13 +190,22 @@ export function useChat() {
   }, [currentTopicId, messages]);
 
   // ─── Send message ───
-  const send = useCallback((message: string, topicId?: string) => {
+  const send = useCallback((message: string, topicId?: string, files?: File[]) => {
     const targetTopicId = topicId ?? currentTopicId ?? undefined;
+
+    // Build user message blocks (text + image previews)
+    const userBlocks: MessageBlock[] = [];
+    if (files?.length) {
+      for (const f of files) {
+        userBlocks.push({ type: "image", url: URL.createObjectURL(f), name: f.name });
+      }
+    }
+    userBlocks.push({ type: "text", content: message });
 
     const userMsg: ChatMessage = {
       id: nextId(),
       role: "user",
-      blocks: [{ type: "text", content: message }],
+      blocks: userBlocks,
       status: "done",
     };
 
@@ -220,7 +239,9 @@ export function useChat() {
       });
     };
 
-    const cancel = agent.send(message, { topicId: targetTopicId }, {
+    // Upload files first (if any), then send with attachment paths
+    const doSend = (attachments?: string[], overrideTopicId?: string) => {
+      return agent.send(message, { topicId: overrideTopicId ?? targetTopicId, attachments }, {
       onInfo: (info) => {
         const match = info.match(/\[topic\]\s+(\S+)/);
         if (match) {
@@ -295,7 +316,36 @@ export function useChat() {
         setError(err.message);
         streamRef.current = null;
       },
-    });
+      });
+    };
+
+    // Upload files then send, or send directly
+    let cancel: () => void;
+    if (files?.length) {
+      // If no topic yet, create one first
+      const uploadAndSend = async () => {
+        try {
+          let topicForUpload = targetTopicId;
+          if (!topicForUpload) {
+            const topic = await agent.createTopic(message.slice(0, 30) || "image");
+            topicForUpload = topic.id;
+            setCurrentTopicId(topicForUpload);
+            if (streamRef.current) streamRef.current.topicId = topicForUpload;
+            loadTopics();
+          }
+          const results = await Promise.all(files.map(f => agent.upload(f, topicForUpload!)));
+          cancel = doSend(results.map(r => r.path), topicForUpload);
+          if (streamRef.current) streamRef.current.cancel = cancel;
+        } catch (err: any) {
+          updateAssistant({ blocks: [{ type: "text", content: `Upload failed: ${err.message}` }], status: "error" });
+          setIsStreaming(false);
+        }
+      };
+      uploadAndSend();
+      cancel = () => {}; // placeholder until upload completes
+    } else {
+      cancel = doSend();
+    }
 
     // Track the stream
     streamRef.current = {

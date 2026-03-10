@@ -118,11 +118,10 @@ func saveScreenshotFromDataURL(dataURL string) (bool, string) {
 		ext = ".webp"
 	}
 
-	// Generate filename with timestamp
+	// Generate filename with timestamp — saved to current topic directory
 	filename := fmt.Sprintf("screenshot-%d%s", time.Now().UnixMilli(), ext)
-	relPath := filepath.Join("images", filename)
 
-	absPath, err := resolvePath(relPath)
+	absPath, err := resolvePath(filename)
 	if err != nil {
 		return false, ""
 	}
@@ -132,7 +131,8 @@ func saveScreenshotFromDataURL(dataURL string) (bool, string) {
 		return false, ""
 	}
 
-	url := pinixDataURLPrefix + relPath
+	relForURL := resolvePathToRelative(filename)
+	url := pinixDataURLPrefix + relForURL
 	return true, url
 }
 

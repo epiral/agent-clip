@@ -35,6 +35,41 @@ export async function getTopicData(topicId: string): Promise<TopicResponse> {
   return invoke<TopicResponse>("get-topic", { args: [topicId] });
 }
 
+// ─── Upload ───
+
+export interface UploadResult {
+  path: string;
+  size: number;
+}
+
+export async function upload(
+  file: File,
+  topicId: string,
+): Promise<UploadResult> {
+  const data = await fileToBase64(file);
+  return invoke<UploadResult>("upload", {
+    stdin: JSON.stringify({
+      name: file.name,
+      mime: file.type,
+      data,
+      topic_id: topicId,
+    }),
+  });
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      // Strip data:...;base64, prefix
+      resolve(result.split(",")[1]);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 // ─── Send (streaming) ───
 
 export interface SendCallbacks {
@@ -56,6 +91,24 @@ export function send(
   options: SendOptions = {},
   callbacks: SendCallbacks = {},
 ): () => void {
+  // If attachments present, use stdin JSON mode
+  if (options.attachments?.length) {
+    const stdin = JSON.stringify({
+      message,
+      topic_id: options.topicId,
+      run_id: options.runId,
+      attachments: options.attachments,
+    });
+    return invokeStream(
+      "send",
+      { args: ["--output", "jsonl"], stdin },
+      (event: StreamEvent) => dispatchEvent(event, callbacks),
+      (exitCode: number) => {
+        if (exitCode !== 0) callbacks.onError?.(new Error(`send exited with code ${exitCode}`));
+      },
+    );
+  }
+
   const args: string[] = ["-p", message, "--output", "jsonl"];
   if (options.topicId) args.push("-t", options.topicId);
   if (options.runId) args.push("-r", options.runId);
@@ -64,34 +117,36 @@ export function send(
   return invokeStream(
     "send",
     { args },
-    (event: StreamEvent) => {
-      switch (event.type) {
-        case "info":
-          callbacks.onInfo?.(event.message);
-          break;
-        case "text":
-          callbacks.onText?.(event.content);
-          break;
-        case "thinking":
-          callbacks.onThinking?.(event.content);
-          break;
-        case "tool_call":
-          callbacks.onToolCall?.(event.name, event.arguments);
-          break;
-        case "tool_result":
-          callbacks.onToolResult?.(event.content);
-          break;
-        case "done":
-          callbacks.onDone?.();
-          break;
-      }
-    },
+    (event: StreamEvent) => dispatchEvent(event, callbacks),
     (exitCode: number) => {
       if (exitCode !== 0) {
         callbacks.onError?.(new Error(`send exited with code ${exitCode}`));
       }
     },
   );
+}
+
+function dispatchEvent(event: StreamEvent, callbacks: SendCallbacks) {
+  switch (event.type) {
+    case "info":
+      callbacks.onInfo?.(event.message);
+      break;
+    case "text":
+      callbacks.onText?.(event.content);
+      break;
+    case "thinking":
+      callbacks.onThinking?.(event.content);
+      break;
+    case "tool_call":
+      callbacks.onToolCall?.(event.name, event.arguments);
+      break;
+    case "tool_result":
+      callbacks.onToolResult?.(event.content);
+      break;
+    case "done":
+      callbacks.onDone?.();
+      break;
+  }
 }
 
 // ─── Runs ───

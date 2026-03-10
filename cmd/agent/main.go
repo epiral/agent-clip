@@ -32,6 +32,7 @@ func main() {
 	root.AddCommand(getRunCmd())
 	root.AddCommand(cancelRunCmd())
 	root.AddCommand(configCmd())
+	root.AddCommand(uploadCmd())
 	root.AddCommand(workerCmd())
 	root.AddCommand(memoryWorkerCmd())
 
@@ -101,11 +102,13 @@ func sendCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := getOutput()
 			message := payload
+			var attachments []string
 			if message == "" {
 				var input struct {
-					Message string `json:"message"`
-					TopicID string `json:"topic_id"`
-					RunID   string `json:"run_id"`
+					Message     string   `json:"message"`
+					TopicID     string   `json:"topic_id"`
+					RunID       string   `json:"run_id"`
+					Attachments []string `json:"attachments"`
 				}
 				if err := json.NewDecoder(os.Stdin).Decode(&input); err != nil {
 					return fmt.Errorf("read stdin: %w", err)
@@ -117,6 +120,7 @@ func sendCmd() *cobra.Command {
 				if runID == "" {
 					runID = input.RunID
 				}
+				attachments = input.Attachments
 			}
 			if message == "" {
 				return fmt.Errorf("message is required (-p or stdin JSON)")
@@ -154,6 +158,12 @@ func sendCmd() *cobra.Command {
 				out.Info(fmt.Sprintf("[topic] %s (%s)", topicID, topic.Name))
 			}
 
+			// Set topic context for file operations, then append attachment metadata
+			internal.SetCurrentTopic(topicID)
+			if len(attachments) > 0 {
+				message = internal.AppendAttachments(message, attachments)
+			}
+
 			activeRun, err := internal.GetActiveRun(db, topicID)
 			if err != nil {
 				return err
@@ -167,7 +177,7 @@ func sendCmd() *cobra.Command {
 			if async {
 				return startAsync(db, topicID, message, out)
 			}
-			return runSync(db, topicID, message, out)
+			return runSync(db, topicID, message, attachments, out)
 		},
 	}
 
@@ -179,11 +189,15 @@ func sendCmd() *cobra.Command {
 	return cmd
 }
 
-func runSync(db *sql.DB, topicID, message string, out internal.Output) error {
+func runSync(db *sql.DB, topicID, message string, attachments []string, out internal.Output) error {
 	cfg, err := internal.LoadConfig()
 	if err != nil {
 		return err
 	}
+
+	// Ensure topic directory exists and set context for file operations
+	_ = internal.EnsureTopicDir(topicID)
+	internal.SetCurrentTopic(topicID)
 
 	run, err := internal.CreateRun(db, topicID, os.Getpid(), false)
 	if err != nil {
@@ -194,6 +208,14 @@ func runSync(db *sql.DB, topicID, message string, out internal.Output) error {
 	if err != nil {
 		_ = internal.FinishRun(db, run.ID, "error")
 		return err
+	}
+
+	// Auto-attach image attachments as vision content on the user message
+	if len(attachments) > 0 {
+		if images := internal.ReadImageAttachments(attachments); len(images) > 0 {
+			lastMsg := &ctx.Messages[len(ctx.Messages)-1]
+			lastMsg.Images = images
+		}
 	}
 
 	registry := buildRegistry(db, cfg)
@@ -266,6 +288,10 @@ func workerCmd() *cobra.Command {
 				return err
 			}
 			defer db.Close()
+
+			// Set topic context for file operations
+			_ = internal.EnsureTopicDir(topicID)
+			internal.SetCurrentTopic(topicID)
 
 			db.Exec("UPDATE runs SET pid = ? WHERE id = ?", os.Getpid(), runID)
 
@@ -398,16 +424,23 @@ func getTopicCmd() *cobra.Command {
 			}
 
 			// Convert to a web-friendly format
+			topicID := args[0]
 			type webToolCall struct {
 				Name      string `json:"name"`
 				Arguments string `json:"arguments"`
 			}
+			type webAttachment struct {
+				Name    string `json:"name"`
+				URL     string `json:"url"`
+				IsImage bool   `json:"is_image"`
+			}
 			type webMsg struct {
-				Role       string        `json:"role"`
-				Content    string        `json:"content"`
-				ToolCallID string        `json:"tool_call_id,omitempty"`
-				Reasoning  string        `json:"reasoning,omitempty"`
-				ToolCalls  []webToolCall `json:"tool_calls,omitempty"`
+				Role        string          `json:"role"`
+				Content     string          `json:"content"`
+				ToolCallID  string          `json:"tool_call_id,omitempty"`
+				Reasoning   string          `json:"reasoning,omitempty"`
+				ToolCalls   []webToolCall   `json:"tool_calls,omitempty"`
+				Attachments []webAttachment `json:"attachments,omitempty"`
 			}
 			result := make([]webMsg, 0, len(msgs))
 			for _, m := range msgs {
@@ -430,7 +463,15 @@ func getTopicCmd() *cobra.Command {
 				}
 				// Sanitize for display
 				if wm.Role == "user" {
-					wm.Content = internal.ExtractUserContent(wm.Content)
+					var attachPaths []string
+					wm.Content, attachPaths = internal.ExtractUserContent(wm.Content)
+					for _, p := range attachPaths {
+						wm.Attachments = append(wm.Attachments, webAttachment{
+							Name:    p,
+							URL:     internal.AttachmentToURL(topicID, p),
+							IsImage: internal.IsImageFile(p),
+						})
+					}
 				}
 				if wm.Role == "assistant" {
 					wm.Content, wm.Reasoning = internal.ExtractThinking(wm.Content, wm.Reasoning)
@@ -568,6 +609,29 @@ func listTopicsCmd() *cobra.Command {
 	cmd.Flags().IntVarP(&limit, "limit", "l", 20, "Max topics to return")
 	cmd.Flags().IntVar(&offset, "offset", 0, "Skip first N topics")
 	return cmd
+}
+
+func uploadCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "upload",
+		Short: "Upload a file to a topic directory",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			out := getOutput()
+
+			var input internal.UploadInput
+			if err := json.NewDecoder(os.Stdin).Decode(&input); err != nil {
+				return fmt.Errorf("read stdin: %w", err)
+			}
+
+			result, err := internal.UploadFile(&input)
+			if err != nil {
+				return err
+			}
+
+			out.Result(result)
+			return nil
+		},
+	}
 }
 
 func spawnMemoryWorker(topicID, runID string) {

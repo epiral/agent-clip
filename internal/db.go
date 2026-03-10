@@ -106,6 +106,8 @@ func CreateTopic(db *sql.DB, name string) (*Topic, error) {
 	if err != nil {
 		return nil, fmt.Errorf("insert topic: %w", err)
 	}
+	// Create topic file directory
+	_ = EnsureTopicDir(t.ID)
 	return t, nil
 }
 
