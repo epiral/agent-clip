@@ -21,11 +21,11 @@ var httpClient = &http.Client{
 // --- Message types ---
 
 type Message struct {
-	Role       string     `json:"role"`
-	Content    *string    `json:"content"`
-	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
-	ToolCallID string     `json:"tool_call_id,omitempty"`
-	Reasoning  *string    `json:"-"`
+	Role       string      `json:"role"`
+	Content    *string     `json:"content"`
+	ToolCalls  []ToolCall  `json:"tool_calls,omitempty"`
+	ToolCallID string      `json:"tool_call_id,omitempty"`
+	Reasoning  *string     `json:"-"`
 	Images     []ImageData `json:"-"` // vision content; not persisted to DB, only for LLM API
 }
 
@@ -56,7 +56,7 @@ func ToolResultMessage(toolCallID, content string) Message {
 // --- Tool definition ---
 
 type ToolDef struct {
-	Type     string         `json:"type"`
+	Type     string          `json:"type"`
 	Function ToolFunctionDef `json:"function"`
 }
 

@@ -99,23 +99,7 @@ func ReadImageAttachments(attachments []string) []ImageData {
 			continue
 		}
 
-		mime := "image/png"
-		ext := strings.ToLower(filepath.Ext(path))
-		switch ext {
-		case ".jpg", ".jpeg":
-			mime = "image/jpeg"
-		case ".webp":
-			mime = "image/webp"
-		case ".gif":
-			mime = "image/gif"
-		case ".svg":
-			mime = "image/svg+xml"
-		}
-
-		images = append(images, ImageData{
-			Base64:   base64.StdEncoding.EncodeToString(data),
-			MimeType: mime,
-		})
+		images = append(images, imageDataFromBytes(path, data))
 	}
 	return images
 }

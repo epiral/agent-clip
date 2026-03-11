@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 	"math"
+	"net/http"
 )
 
 type embeddingRequest struct {

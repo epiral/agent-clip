@@ -290,8 +290,8 @@ func parseBrowserArgs(args []string) *browserRequest {
 		}
 		req := &browserRequest{Action: "scroll", Direction: rest[0]}
 		if len(rest) > 1 {
-			var px int
-			if _, err := fmt.Sscanf(rest[1], "%d", &px); err == nil {
+			px, err := parsePositiveInt(rest[1])
+			if err == nil {
 				req.Pixels = &px
 			}
 		}

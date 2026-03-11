@@ -248,16 +248,9 @@ func (r *Registry) registerBuiltins() {
 	})
 
 	r.Register("head", "Show first N lines (default 10). Usage: head 5 or head -n 5", func(args []string, stdin string) (string, error) {
-		n := 10
-		for i, a := range args {
-			if a == "-n" && i+1 < len(args) {
-				fmt.Sscanf(args[i+1], "%d", &n)
-			} else {
-				cleaned := strings.TrimLeft(a, "-")
-				if v, err := strconv.Atoi(cleaned); err == nil && v > 0 {
-					n = v
-				}
-			}
+		n, err := parseOptionalLineCountArgs(args, 10)
+		if err != nil {
+			return "", err
 		}
 		lines := strings.Split(stdin, "\n")
 		if n > 0 && len(lines) > n {
@@ -267,16 +260,9 @@ func (r *Registry) registerBuiltins() {
 	})
 
 	r.Register("tail", "Show last N lines (default 10). Usage: tail 5 or tail -n 5", func(args []string, stdin string) (string, error) {
-		n := 10
-		for i, a := range args {
-			if a == "-n" && i+1 < len(args) {
-				fmt.Sscanf(args[i+1], "%d", &n)
-			} else {
-				cleaned := strings.TrimLeft(a, "-")
-				if v, err := strconv.Atoi(cleaned); err == nil && v > 0 {
-					n = v
-				}
-			}
+		n, err := parseOptionalLineCountArgs(args, 10)
+		if err != nil {
+			return "", err
 		}
 		lines := strings.Split(stdin, "\n")
 		if n > 0 && len(lines) > n {

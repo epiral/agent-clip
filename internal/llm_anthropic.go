@@ -31,14 +31,14 @@ type anthMessage struct {
 // Fields are type-specific; omitempty ensures only relevant fields appear.
 type anthBlock struct {
 	Type      string          `json:"type"`
-	Text      string          `json:"text,omitempty"`          // text block
-	Thinking  string          `json:"thinking,omitempty"`      // thinking block
-	Signature string          `json:"signature,omitempty"`     // thinking block signature
-	ID        string          `json:"id,omitempty"`            // tool_use block
-	Name      string          `json:"name,omitempty"`          // tool_use block
-	Input     json.RawMessage `json:"input,omitempty"`         // tool_use block
-	ToolUseID string          `json:"tool_use_id,omitempty"`   // tool_result block
-	Content   string          `json:"content,omitempty"`       // tool_result block result
+	Text      string          `json:"text,omitempty"`        // text block
+	Thinking  string          `json:"thinking,omitempty"`    // thinking block
+	Signature string          `json:"signature,omitempty"`   // thinking block signature
+	ID        string          `json:"id,omitempty"`          // tool_use block
+	Name      string          `json:"name,omitempty"`        // tool_use block
+	Input     json.RawMessage `json:"input,omitempty"`       // tool_use block
+	ToolUseID string          `json:"tool_use_id,omitempty"` // tool_result block
+	Content   string          `json:"content,omitempty"`     // tool_result block result
 }
 
 type anthTool struct {

@@ -88,14 +88,6 @@ func resolvePathToRelative(path string) string {
 
 const pinixDataURLPrefix = "pinix-data://local/data/"
 
-func IsImageFile(path string) bool {
-	switch strings.ToLower(filepath.Ext(path)) {
-	case ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".ico", ".bmp":
-		return true
-	}
-	return false
-}
-
 func humanSize(n int64) string {
 	switch {
 	case n >= 1<<20:

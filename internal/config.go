@@ -53,6 +53,35 @@ type Config struct {
 	Browser      *BrowserConfig `yaml:"browser,omitempty" json:"browser,omitempty"`
 }
 
+type ConfigJSON struct {
+	Name              string                  `json:"name"`
+	Providers         map[string]ProviderJSON `json:"providers"`
+	LLMProvider       string                  `json:"llm_provider"`
+	LLMModel          string                  `json:"llm_model"`
+	EmbeddingProvider string                  `json:"embedding_provider"`
+	EmbeddingModel    string                  `json:"embedding_model"`
+	SystemPrompt      string                  `json:"system_prompt"`
+	Clips             []ClipJSON              `json:"clips"`
+	Browser           *BrowserConfigJSON      `json:"browser,omitempty"`
+}
+
+type ProviderJSON struct {
+	Protocol string `json:"protocol"`
+	BaseURL  string `json:"base_url"`
+	APIKey   string `json:"api_key"`
+}
+
+type ClipJSON struct {
+	Name     string   `json:"name"`
+	URL      string   `json:"url"`
+	Token    string   `json:"token"`
+	Commands []string `json:"commands,omitempty"`
+}
+
+type BrowserConfigJSON struct {
+	Endpoint string `json:"endpoint"`
+}
+
 func (c *Config) GetLLMProvider() (*ProviderConfig, error) {
 	return c.getProvider(c.LLMProvider)
 }
@@ -102,39 +131,30 @@ func LoadConfig() (*Config, error) {
 // --- Read ---
 
 // ConfigGetJSON returns config as a JSON-serializable map with sensitive fields masked.
-func ConfigGetJSON(cfg *Config) map[string]interface{} {
-	providers := map[string]interface{}{}
+func ConfigGetJSON(cfg *Config) ConfigJSON {
+	providers := make(map[string]ProviderJSON, len(cfg.Providers))
 	for name, p := range cfg.Providers {
-		providers[name] = map[string]interface{}{
-			"protocol": p.Protocol,
-			"base_url": p.BaseURL,
-			"api_key":  maskSecret(p.APIKey),
-		}
+		providers[name] = ProviderJSON{Protocol: p.Protocol, BaseURL: p.BaseURL, APIKey: maskSecret(p.APIKey)}
 	}
 
-	clips := []map[string]interface{}{}
+	clips := make([]ClipJSON, 0, len(cfg.Clips))
 	for _, c := range cfg.Clips {
-		clips = append(clips, map[string]interface{}{
-			"name":     c.Name,
-			"url":      c.URL,
-			"token":    maskSecret(c.Token),
-			"commands": c.Commands,
-		})
+		clips = append(clips, ClipJSON{Name: c.Name, URL: c.URL, Token: maskSecret(c.Token), Commands: c.Commands})
 	}
 
-	result := map[string]interface{}{
-		"name":               cfg.Name,
-		"providers":          providers,
-		"llm_provider":       cfg.LLMProvider,
-		"llm_model":          cfg.LLMModel,
-		"embedding_provider": cfg.EmbeddingProvider,
-		"embedding_model":    cfg.EmbeddingModel,
-		"system_prompt":      cfg.SystemPrompt,
-		"clips":              clips,
+	result := ConfigJSON{
+		Name:              cfg.Name,
+		Providers:         providers,
+		LLMProvider:       cfg.LLMProvider,
+		LLMModel:          cfg.LLMModel,
+		EmbeddingProvider: cfg.EmbeddingProvider,
+		EmbeddingModel:    cfg.EmbeddingModel,
+		SystemPrompt:      cfg.SystemPrompt,
+		Clips:             clips,
 	}
 
 	if cfg.Browser != nil {
-		result["browser"] = map[string]interface{}{"endpoint": cfg.Browser.Endpoint}
+		result.Browser = &BrowserConfigJSON{Endpoint: cfg.Browser.Endpoint}
 	}
 
 	return result
