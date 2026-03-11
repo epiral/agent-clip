@@ -321,20 +321,39 @@ func sendCmd() *cobra.Command {
 	return cmd
 }
 
+func prepareRunEnvironment(topicID string) error {
+	if err := internal.EnsureTopicDir(topicID); err != nil {
+		return fmt.Errorf("ensure topic dir: %w", err)
+	}
+	internal.SetCurrentTopic(topicID)
+	internal.EnsureSkillsDir()
+	return nil
+}
+
+func buildRunContext(db *sql.DB, cfg *internal.Config, topicID, message string, attachments []string) (*internal.ContextResult, error) {
+	ctx, err := internal.BuildContext(db, cfg, topicID, message)
+	if err != nil {
+		return nil, err
+	}
+	if len(attachments) > 0 {
+		if images := internal.ReadImageAttachments(attachments); len(images) > 0 {
+			lastMsg := &ctx.Messages[len(ctx.Messages)-1]
+			lastMsg.Images = images
+		}
+	}
+	return ctx, nil
+}
+
 func runSync(db *sql.DB, topicID, message string, attachments []string, out internal.Output) error {
 	cfg, err := internal.LoadConfig()
 	if err != nil {
 		return err
 	}
 
-	// Ensure topic directory and skills directory exist
-	if err := internal.EnsureTopicDir(topicID); err != nil {
-		return fmt.Errorf("ensure topic dir: %w", err)
+	if err := prepareRunEnvironment(topicID); err != nil {
+		return err
 	}
-	internal.SetCurrentTopic(topicID)
-	internal.EnsureSkillsDir()
 
-	// Probe clips for auto-discovery (GetInfo RPC)
 	internal.ProbeClips(cfg)
 
 	run, err := internal.CreateRun(db, topicID, os.Getpid(), false)
@@ -342,18 +361,10 @@ func runSync(db *sql.DB, topicID, message string, attachments []string, out inte
 		return err
 	}
 
-	ctx, err := internal.BuildContext(db, cfg, topicID, message)
+	ctx, err := buildRunContext(db, cfg, topicID, message, attachments)
 	if err != nil {
 		_ = internal.FinishRun(db, run.ID, "error")
 		return err
-	}
-
-	// Auto-attach image attachments as vision content on the user message
-	if len(attachments) > 0 {
-		if images := internal.ReadImageAttachments(attachments); len(images) > 0 {
-			lastMsg := &ctx.Messages[len(ctx.Messages)-1]
-			lastMsg.Images = images
-		}
 	}
 
 	registry := buildRegistry(db, cfg)
@@ -430,19 +441,17 @@ func workerCmd() *cobra.Command {
 			}
 			defer db.Close()
 
-			// Set topic context for file operations
-			if err := internal.EnsureTopicDir(topicID); err != nil {
+			if err := prepareRunEnvironment(topicID); err != nil {
 				_ = internal.FinishRun(db, runID, "error")
-				return fmt.Errorf("ensure topic dir: %w", err)
+				return err
 			}
-			internal.SetCurrentTopic(topicID)
 
 			if _, err := db.Exec("UPDATE runs SET pid = ? WHERE id = ?", os.Getpid(), runID); err != nil {
 				_ = internal.FinishRun(db, runID, "error")
 				return fmt.Errorf("update run pid: %w", err)
 			}
 
-			ctx, err := internal.BuildContext(db, cfg, topicID, message)
+			ctx, err := buildRunContext(db, cfg, topicID, message, nil)
 			if err != nil {
 				_ = internal.FinishRun(db, runID, "error")
 				return err

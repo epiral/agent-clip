@@ -598,10 +598,6 @@ func countTopicRuns(db *sql.DB, topicID string) (int, error) {
 	return count, err
 }
 
-func getTopicRuns(db *sql.DB, topicID string) ([]topicRunInfo, error) {
-	return getTopicRunsPage(db, topicID, 0, 0)
-}
-
 func getTopicRunsPage(db *sql.DB, topicID string, limit, offset int) ([]topicRunInfo, error) {
 	query := `
 		SELECT r.id, r.status, r.started_at, COALESCE(r.finished_at, 0),
