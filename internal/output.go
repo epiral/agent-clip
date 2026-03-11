@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sync"
 )
 
 // Output abstracts how commands emit results.
@@ -60,6 +61,7 @@ func (o *CLIOutput) Inject(content string) {
 
 type JSONLOutput struct {
 	enc *json.Encoder
+	mu  sync.Mutex
 }
 
 func NewJSONLOutput() *JSONLOutput {
@@ -68,7 +70,11 @@ func NewJSONLOutput() *JSONLOutput {
 	return &JSONLOutput{enc: enc}
 }
 
-func (o *JSONLOutput) emit(v any) { o.enc.Encode(v) }
+func (o *JSONLOutput) emit(v any) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	_ = o.enc.Encode(v)
+}
 
 func (o *JSONLOutput) Info(msg string) {
 	o.emit(map[string]string{"type": "info", "message": msg})
@@ -117,5 +123,16 @@ func AsyncFileOutput(runID string) *CLIOutput {
 	if err != nil {
 		return NewCLIOutput(io.Discard, io.Discard)
 	}
-	return NewCLIOutput(f, f)
+	return NewCLIOutput(&syncWriter{w: f}, &syncWriter{w: f})
+}
+
+type syncWriter struct {
+	mu sync.Mutex
+	w  io.Writer
+}
+
+func (w *syncWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.w.Write(p)
 }

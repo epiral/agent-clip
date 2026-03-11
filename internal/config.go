@@ -39,7 +39,7 @@ type BrowserConfig struct {
 }
 
 type Config struct {
-	Name      string                   `yaml:"name" json:"name"`
+	Name      string                    `yaml:"name" json:"name"`
 	Providers map[string]ProviderConfig `yaml:"providers" json:"providers"`
 
 	LLMProvider string `yaml:"llm_provider" json:"llm_provider"`
@@ -102,19 +102,19 @@ func LoadConfig() (*Config, error) {
 // --- Read ---
 
 // ConfigGetJSON returns config as a JSON-serializable map with sensitive fields masked.
-func ConfigGetJSON(cfg *Config) map[string]any {
-	providers := map[string]any{}
+func ConfigGetJSON(cfg *Config) map[string]interface{} {
+	providers := map[string]interface{}{}
 	for name, p := range cfg.Providers {
-		providers[name] = map[string]any{
+		providers[name] = map[string]interface{}{
 			"protocol": p.Protocol,
 			"base_url": p.BaseURL,
 			"api_key":  maskSecret(p.APIKey),
 		}
 	}
 
-	clips := []map[string]any{}
+	clips := []map[string]interface{}{}
 	for _, c := range cfg.Clips {
-		clips = append(clips, map[string]any{
+		clips = append(clips, map[string]interface{}{
 			"name":     c.Name,
 			"url":      c.URL,
 			"token":    maskSecret(c.Token),
@@ -122,7 +122,7 @@ func ConfigGetJSON(cfg *Config) map[string]any {
 		})
 	}
 
-	result := map[string]any{
+	result := map[string]interface{}{
 		"name":               cfg.Name,
 		"providers":          providers,
 		"llm_provider":       cfg.LLMProvider,
@@ -134,7 +134,7 @@ func ConfigGetJSON(cfg *Config) map[string]any {
 	}
 
 	if cfg.Browser != nil {
-		result["browser"] = map[string]any{"endpoint": cfg.Browser.Endpoint}
+		result["browser"] = map[string]interface{}{"endpoint": cfg.Browser.Endpoint}
 	}
 
 	return result

@@ -6,15 +6,25 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
 // topicID is set per-run to scope file operations to the current topic.
 var currentTopicID string
+var currentTopicMu sync.RWMutex
 
 // SetCurrentTopic sets the topic context for file path resolution.
 func SetCurrentTopic(topicID string) {
+	currentTopicMu.Lock()
+	defer currentTopicMu.Unlock()
 	currentTopicID = topicID
+}
+
+func getCurrentTopic() string {
+	currentTopicMu.RLock()
+	defer currentTopicMu.RUnlock()
+	return currentTopicID
 }
 
 // TopicDir returns the absolute path to a topic's file directory.
@@ -45,20 +55,21 @@ func resolvePath(rel string) (string, error) {
 		abs := filepath.Join(root, "topics", trimmed)
 		abs = filepath.Clean(abs)
 		topicsRoot := filepath.Join(root, "topics")
-		if !strings.HasPrefix(abs, topicsRoot) {
+		if !strings.HasPrefix(abs, topicsRoot+string(os.PathSeparator)) && abs != topicsRoot {
 			return "", fmt.Errorf("path escapes topics directory: %s", rel)
 		}
 		return abs, nil
 	}
 
 	// Relative: resolve under current topic
+	currentTopicID := getCurrentTopic()
 	if currentTopicID == "" {
 		return "", fmt.Errorf("no topic context set (relative path %q requires a topic)", rel)
 	}
 	topicRoot := TopicDir(currentTopicID)
 	abs := filepath.Join(topicRoot, rel)
 	abs = filepath.Clean(abs)
-	if !strings.HasPrefix(abs, topicRoot) {
+	if !strings.HasPrefix(abs, topicRoot+string(os.PathSeparator)) && abs != topicRoot {
 		return "", fmt.Errorf("path escapes topic directory: %s", rel)
 	}
 	return abs, nil
@@ -69,7 +80,7 @@ func resolvePathToRelative(path string) string {
 	if strings.HasPrefix(path, "/") {
 		return "topics/" + strings.TrimPrefix(path, "/")
 	}
-	if currentTopicID != "" {
+	if currentTopicID := getCurrentTopic(); currentTopicID != "" {
 		return filepath.Join("topics", currentTopicID, path)
 	}
 	return path

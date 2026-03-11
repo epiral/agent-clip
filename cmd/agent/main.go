@@ -328,7 +328,9 @@ func runSync(db *sql.DB, topicID, message string, attachments []string, out inte
 	}
 
 	// Ensure topic directory and skills directory exist
-	_ = internal.EnsureTopicDir(topicID)
+	if err := internal.EnsureTopicDir(topicID); err != nil {
+		return fmt.Errorf("ensure topic dir: %w", err)
+	}
 	internal.SetCurrentTopic(topicID)
 	internal.EnsureSkillsDir()
 
@@ -397,7 +399,10 @@ func startAsync(db *sql.DB, topicID, message string, out internal.Output) error 
 		return fmt.Errorf("start worker: %w", err)
 	}
 
-	db.Exec("UPDATE runs SET pid = ? WHERE id = ?", cmd.Process.Pid, run.ID)
+	if _, err := db.Exec("UPDATE runs SET pid = ? WHERE id = ?", cmd.Process.Pid, run.ID); err != nil {
+		_ = internal.FinishRun(db, run.ID, "error")
+		return fmt.Errorf("update worker pid: %w", err)
+	}
 
 	out.Info(fmt.Sprintf("[run] %s started (async, pid %d)", run.ID, cmd.Process.Pid))
 	out.Info(fmt.Sprintf("  → watch:   get-run %s", run.ID))
@@ -426,10 +431,16 @@ func workerCmd() *cobra.Command {
 			defer db.Close()
 
 			// Set topic context for file operations
-			_ = internal.EnsureTopicDir(topicID)
+			if err := internal.EnsureTopicDir(topicID); err != nil {
+				_ = internal.FinishRun(db, runID, "error")
+				return fmt.Errorf("ensure topic dir: %w", err)
+			}
 			internal.SetCurrentTopic(topicID)
 
-			db.Exec("UPDATE runs SET pid = ? WHERE id = ?", os.Getpid(), runID)
+			if _, err := db.Exec("UPDATE runs SET pid = ? WHERE id = ?", os.Getpid(), runID); err != nil {
+				_ = internal.FinishRun(db, runID, "error")
+				return fmt.Errorf("update run pid: %w", err)
+			}
 
 			ctx, err := internal.BuildContext(db, cfg, topicID, message)
 			if err != nil {

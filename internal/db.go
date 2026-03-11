@@ -3,9 +3,11 @@ package internal
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,6 +21,10 @@ func OpenDB() (*sql.DB, error) {
 	db, err := sql.Open("sqlite", dbPath+"?_journal_mode=WAL")
 	if err != nil {
 		return nil, fmt.Errorf("open db: %w", err)
+	}
+	if err := db.Ping(); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("ping db: %w", err)
 	}
 
 	schemaPath := filepath.Join(base, "seed", "schema.sql")
@@ -38,10 +44,17 @@ func OpenDB() (*sql.DB, error) {
 	}
 
 	// migrate: add columns if missing
-	db.Exec("ALTER TABLE messages ADD COLUMN run_id TEXT")
-	db.Exec("ALTER TABLE messages ADD COLUMN reasoning TEXT")
-	db.Exec("ALTER TABLE summaries ADD COLUMN run_id TEXT")
-	db.Exec("ALTER TABLE summaries ADD COLUMN embedding_model TEXT")
+	for _, stmt := range []string{
+		"ALTER TABLE messages ADD COLUMN run_id TEXT",
+		"ALTER TABLE messages ADD COLUMN reasoning TEXT",
+		"ALTER TABLE summaries ADD COLUMN run_id TEXT",
+		"ALTER TABLE summaries ADD COLUMN embedding_model TEXT",
+	} {
+		if _, err := db.Exec(stmt); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+			_ = db.Close()
+			return nil, fmt.Errorf("migrate schema: %w", err)
+		}
+	}
 
 	// one-time data cleanup: move <think> from content to reasoning
 	migrateThinkTags(db)
@@ -83,7 +96,7 @@ func migrateThinkTags(db *sql.DB) {
 	}
 
 	for _, f := range fixes {
-		db.Exec("UPDATE messages SET content = ?, reasoning = ? WHERE rowid = ?", f.content, f.reasoning, f.rowid)
+		_, _ = db.Exec("UPDATE messages SET content = ?, reasoning = ? WHERE rowid = ?", f.content, f.reasoning, f.rowid)
 	}
 }
 
@@ -107,7 +120,9 @@ func CreateTopic(db *sql.DB, name string) (*Topic, error) {
 		return nil, fmt.Errorf("insert topic: %w", err)
 	}
 	// Create topic file directory
-	_ = EnsureTopicDir(t.ID)
+	if err := EnsureTopicDir(t.ID); err != nil {
+		return nil, fmt.Errorf("create topic dir: %w", err)
+	}
 	return t, nil
 }
 
@@ -176,8 +191,11 @@ func RenameTopic(db *sql.DB, id, name string) error {
 func GetTopic(db *sql.DB, id string) (*Topic, error) {
 	var t Topic
 	err := db.QueryRow("SELECT id, name, created_at FROM topics WHERE id = ?", id).Scan(&t.ID, &t.Name, &t.CreatedAt)
-	if err != nil {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("topic %s not found", id)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get topic: %w", err)
 	}
 	return &t, nil
 }
