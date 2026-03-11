@@ -170,7 +170,7 @@ export function ChatComposer({ onSend, onCancel, isStreaming, agentName }: ChatC
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
           placeholder={t("Ask {name} anything...", { name: agentName || "Agent" })}
-          className="flex-1 min-h-[40px] max-h-[240px] resize-none border-none bg-transparent focus:ring-0 px-2 py-2 text-sm leading-relaxed placeholder:text-muted/50 placeholder:italic placeholder:font-serif no-scrollbar"
+          className="flex-1 min-h-[40px] max-h-[240px] resize-none border-none bg-transparent focus:ring-0 px-2 py-2 text-[16px] md:text-sm leading-relaxed placeholder:text-muted/50 placeholder:italic placeholder:font-serif no-scrollbar"
           rows={1}
         />
 

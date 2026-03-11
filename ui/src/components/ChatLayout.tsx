@@ -47,10 +47,33 @@ export function ChatLayout() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [configState]);
 
+  // Visual Viewport API for iOS Keyboard handling
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+
+    const update = () => {
+      document.documentElement.style.setProperty("--app-height", vv.height + "px");
+      window.scrollTo(0, 0);
+    };
+
+    update();
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+
+    return () => {
+      vv.removeEventListener("resize", update);
+      vv.removeEventListener("scroll", update);
+    };
+  }, []);
+
   // Show loading while checking config
   if (configState === null) {
     return (
-      <div className="flex flex-col items-center justify-center h-[100dvh] bg-paper">
+      <div 
+        className="flex flex-col items-center justify-center bg-paper"
+        style={{ height: "var(--app-height, 100dvh)" }}
+      >
         <div className="flex flex-col items-center gap-4">
           <div className="w-12 h-12 border-2 border-ink flex items-center justify-center animate-pulse">
             <div className="w-2 h-2 bg-ink" />
@@ -87,7 +110,10 @@ export function ChatLayout() {
   );
 
   return (
-    <div className="flex h-[100dvh] w-full overflow-hidden bg-paper text-ink selection:bg-ink selection:text-paper font-sans">
+    <div 
+      className="flex w-full overflow-hidden bg-paper text-ink selection:bg-ink selection:text-paper font-sans"
+      style={{ height: "var(--app-height, 100dvh)" }}
+    >
       
       {/* Desktop Sidebar */}
       {sidebarOpen && (
