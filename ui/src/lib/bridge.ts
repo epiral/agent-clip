@@ -10,8 +10,9 @@ interface BridgeAPI {
   invokeStream(
     command: string,
     opts: { args?: string[]; stdin?: string },
-    onChunk: (text: string) => void,
+    onChunk: (kind: "stdout" | "stderr", text: string) => void,
     onDone: (exitCode: number) => void,
+    onError: (error: Error) => void,
   ): () => void;
 }
 
@@ -56,7 +57,8 @@ export function invokeStream(
   return bridge.invokeStream(
     command,
     opts,
-    (chunk: string) => {
+    (kind: "stdout" | "stderr", chunk: string) => {
+      if (kind !== "stdout") return;
       buffer += chunk;
       const lines = buffer.split("\n");
       buffer = lines.pop() ?? "";
@@ -79,6 +81,9 @@ export function invokeStream(
         }
       }
       onDone(exitCode);
+    },
+    () => {
+      onDone(-1);
     },
   );
 }
