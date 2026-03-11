@@ -94,43 +94,65 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(funct
             exit={{ opacity: 0, y: -20 }}
             className="flex-1 flex flex-col items-center justify-center p-8 h-full w-full"
           >
-            <div className="max-w-2xl w-full space-y-12">
+            <div className="max-w-3xl w-full space-y-16">
               <motion.div 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 }}
-                className="text-center space-y-4"
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
+                className="text-center space-y-6"
               >
-                <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-brand-primary/10 text-brand-primary mb-2 ring-1 ring-brand-primary/20 shadow-glow">
-                  <Sparkles className="w-8 h-8" />
+                <div className="relative inline-flex mb-2">
+                  <motion.div 
+                    animate={{ scale: [1, 1.2, 1], rotate: [0, 5, -5, 0] }}
+                    transition={{ repeat: Infinity, duration: 6, ease: "linear" }}
+                    className="absolute inset-0 bg-primary/20 blur-2xl rounded-full"
+                  />
+                  <div className="relative w-20 h-20 rounded-3xl bg-primary/10 text-primary flex items-center justify-center ring-1 ring-primary/20 shadow-glow overflow-hidden">
+                    <Sparkles className="w-10 h-10" />
+                    <motion.div 
+                      animate={{ x: [-100, 100] }}
+                      transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
+                      className="absolute inset-0 bg-linear-to-r from-transparent via-white/20 to-transparent skew-x-12"
+                    />
+                  </div>
                 </div>
-                <h2 className="text-4xl font-bold tracking-tight text-text-main sm:text-5xl">
-                  {t("How can I help you today?")}
-                </h2>
-                <p className="text-text-mute text-lg max-w-md mx-auto leading-relaxed">
-                  {t("I'm your AI assistant, ready to help with code, analysis, writing, and more.")}
-                </p>
+                <div className="space-y-2">
+                  <h2 className="text-4xl font-bold tracking-tight text-foreground sm:text-5xl lg:text-6xl">
+                    {t("How can I help you today?")}
+                  </h2>
+                  <p className="text-muted-foreground text-lg max-w-lg mx-auto leading-relaxed opacity-70">
+                    {t("I'm your AI assistant, ready to help with code, analysis, writing, and more.")}
+                  </p>
+                </div>
               </motion.div>
               
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {[
-                  { icon: FileText, label: t("Summarize text"), color: "blue" },
-                  { icon: Code, label: t("Write code"), color: "orange" },
-                  { icon: Terminal, label: t("Run sandbox"), color: "green" },
-                  { icon: Zap, label: t("Analyze data"), color: "purple" },
+                  { icon: FileText, label: t("Summarize text"), color: "primary", desc: "Get the gist of any document" },
+                  { icon: Code, label: t("Write code"), color: "primary", desc: "Build components or solve bugs" },
+                  { icon: Terminal, label: t("Run sandbox"), color: "primary", desc: "Execute scripts in a safe env" },
+                  { icon: Zap, label: t("Analyze data"), color: "primary", desc: "Find patterns and insights" },
                 ].map((item, i) => (
                   <motion.button 
                     key={item.label}
-                    initial={{ opacity: 0, y: 10 }}
+                    initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.2 + i * 0.1 }}
+                    transition={{ delay: 0.2 + i * 0.1, duration: 0.4 }}
                     onClick={() => onSendPrompt?.(item.label)}
-                    className="flex items-center gap-4 p-4 bg-bg-surface/50 hover:bg-bg-surface border border-border/40 hover:border-brand-primary/30 rounded-2xl transition-all text-left group shadow-sm hover:shadow-md active:scale-[0.98]"
+                    className="group relative flex items-start gap-4 p-5 bento-surface hover:border-primary/40 hover:scale-[1.02] active:scale-[0.98] transition-all text-left"
                   >
-                    <div className="w-10 h-10 rounded-xl bg-muted/30 flex items-center justify-center group-hover:bg-brand-primary/10 group-hover:text-brand-primary transition-colors border border-border/10">
-                      <item.icon className="w-5 h-5" />
+                    <div className="relative w-12 h-12 rounded-xl bg-muted/30 flex items-center justify-center group-hover:bg-primary/10 group-hover:text-primary transition-colors border border-border/10 shrink-0">
+                      <item.icon className="w-6 h-6" />
                     </div>
-                    <span className="font-semibold text-sm text-text-main/90">{item.label}</span>
+                    <div className="flex flex-col gap-0.5">
+                      <span className="font-bold text-[15px] text-foreground">{item.label}</span>
+                      <span className="text-[12px] text-muted-foreground/60 font-medium">{item.desc}</span>
+                    </div>
+                    <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <motion.div animate={{ x: [0, 4, 0] }} transition={{ repeat: Infinity, duration: 1.5 }}>
+                        <Zap className="w-3.5 h-3.5 text-primary" />
+                      </motion.div>
+                    </div>
                   </motion.button>
                 ))}
               </div>
@@ -146,9 +168,9 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(funct
             <div 
               ref={scrollRef}
               onScroll={handleScroll}
-              className="h-full overflow-y-auto w-full scroll-smooth no-scrollbar"
+              className="h-full overflow-y-auto w-full scroll-smooth no-scrollbar px-4"
             >
-              <div className="pb-40 pt-4 min-h-full">
+              <div className="pb-48 pt-8 max-w-4xl mx-auto w-full space-y-8">
                 {messages.map((msg) => (
                   <MessageBubble key={msg.id} message={msg} agentName={agentName} />
                 ))}
@@ -161,15 +183,15 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(funct
                   initial={{ opacity: 0, y: 10, scale: 0.9 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 10, scale: 0.9 }}
-                  className="absolute bottom-8 left-1/2 -translate-x-1/2 z-20"
+                  className="absolute bottom-12 left-1/2 -translate-x-1/2 z-20"
                 >
                   <Button
                     variant="secondary"
                     size="sm"
                     onClick={scrollToBottom}
-                    className="rounded-full shadow-lg border border-border/40 bg-bg-surface/80 backdrop-blur-md px-4 py-5 flex gap-2 font-semibold text-text-main hover:bg-bg-surface transition-all group"
+                    className="rounded-full shadow-tactile border border-border/40 bg-card/80 backdrop-blur-md px-5 py-6 flex gap-3 font-bold text-[13px] text-foreground hover:bg-card transition-all group active:scale-95"
                   >
-                    <ChevronDown className="w-4 h-4 transition-transform group-hover:translate-y-0.5" />
+                    <ChevronDown className="w-4 h-4 transition-transform group-hover:translate-y-1" />
                     {t("New messages")}
                   </Button>
                 </motion.div>

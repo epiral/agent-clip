@@ -52,14 +52,35 @@ export function ChatLayout() {
   // Show loading while checking config
   if (configState === null) {
     return (
-      <div className="flex items-center justify-center h-[100dvh] bg-bg-base">
-        <motion.div 
-          animate={{ scale: [1, 1.1, 1], opacity: [0.5, 1, 0.5] }}
-          transition={{ repeat: Infinity, duration: 2 }}
-          className="text-brand-primary font-bold tracking-[0.2em] text-xs uppercase"
-        >
-          Initializing Resonance...
-        </motion.div>
+      <div className="flex flex-col items-center justify-center h-[100dvh] bg-background">
+        <div className="relative">
+          <motion.div 
+            animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.6, 0.3] }}
+            transition={{ repeat: Infinity, duration: 3, ease: "easeInOut" }}
+            className="w-24 h-24 bg-primary/20 rounded-full blur-2xl absolute -top-4 -left-4"
+          />
+          <motion.div 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="relative flex flex-col items-center gap-4"
+          >
+            <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center border border-primary/20 shadow-glow">
+              <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+            </div>
+            <div className="flex flex-col items-center gap-1">
+              <span className="text-primary font-bold tracking-[0.3em] text-[10px] uppercase">
+                Initializing Resonance
+              </span>
+              <div className="h-[2px] w-12 bg-primary/10 rounded-full overflow-hidden">
+                <motion.div 
+                  animate={{ x: [-48, 48] }}
+                  transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
+                  className="w-full h-full bg-primary"
+                />
+              </div>
+            </div>
+          </motion.div>
+        </div>
       </div>
     );
   }
@@ -88,24 +109,41 @@ export function ChatLayout() {
   );
 
   return (
-    <div className="flex h-[100dvh] w-full overflow-hidden bg-bg-base text-text-main selection:bg-brand-primary/20 relative">
+    <div className="flex h-[100dvh] w-full overflow-hidden bg-background text-foreground selection:bg-primary/20 relative font-sans">
       {/* Background Decor */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
-        <div className="absolute -top-[10%] -left-[10%] w-[40%] h-[40%] bg-brand-primary/5 rounded-full blur-[120px]" />
-        <div className="absolute top-[20%] -right-[5%] w-[30%] h-[30%] bg-brand-primary/3 rounded-full blur-[100px]" />
+        <motion.div 
+          animate={{ 
+            scale: [1, 1.1, 1],
+            x: [0, 20, 0],
+            y: [0, -20, 0]
+          }}
+          transition={{ repeat: Infinity, duration: 20, ease: "linear" }}
+          className="absolute -top-[10%] -left-[10%] w-[50%] h-[50%] bg-primary/5 rounded-full blur-[120px]" 
+        />
+        <motion.div 
+          animate={{ 
+            scale: [1, 1.2, 1],
+            x: [0, -30, 0],
+            y: [0, 30, 0]
+          }}
+          transition={{ repeat: Infinity, duration: 25, ease: "linear" }}
+          className="absolute top-[20%] -right-[5%] w-[40%] h-[40%] bg-primary/3 rounded-full blur-[100px]" 
+        />
+        <div className="absolute bottom-0 left-0 right-0 h-64 bg-linear-to-t from-background to-transparent opacity-60" />
       </div>
 
       {/* Desktop Sidebar */}
-      <AnimatePresence initial={false}>
+      <AnimatePresence initial={false} mode="wait">
         {sidebarOpen && (
           <motion.div 
             initial={{ width: 0, opacity: 0 }}
-            animate={{ width: 280, opacity: 1 }}
+            animate={{ width: 300, opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
-            transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
-            className="hidden md:flex flex-shrink-0 glass-sidebar z-30 overflow-hidden"
+            transition={{ duration: 0.4, ease: [0.23, 1, 0.32, 1] }}
+            className="hidden md:flex flex-shrink-0 z-30 overflow-hidden border-r border-border/40 bg-sidebar"
           >
-            <div className="w-[280px] h-full">
+            <div className="w-[300px] h-full">
               {sidebarContent}
             </div>
           </motion.div>
@@ -114,7 +152,7 @@ export function ChatLayout() {
 
       {/* Mobile Sidebar (Sheet) */}
       <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
-        <SheetContent side="left" className="p-0 w-[280px] border-r-0 glass-sidebar">
+        <SheetContent side="left" className="p-0 w-[300px] border-r-0 bg-sidebar">
           {sidebarContent}
         </SheetContent>
       </Sheet>
@@ -123,14 +161,14 @@ export function ChatLayout() {
       <div className="flex-1 flex flex-col min-w-0 relative z-10">
         {/* Header */}
         <header
-          className="flex-shrink-0 h-14 border-b border-border/40 flex items-center px-4 md:px-6 justify-between bg-bg-surface/40 backdrop-blur-md z-20 pt-[env(safe-area-inset-top)]"
+          className="flex-shrink-0 h-16 border-b border-border/40 flex items-center px-4 md:px-6 justify-between bg-background/60 backdrop-blur-xl z-20 pt-[env(safe-area-inset-top)]"
           style={{ WebkitAppRegion: "drag" } as any}
         >
           <div className="flex items-center gap-4 w-full" style={{ WebkitAppRegion: "no-drag" } as any}>
             <Button
               variant="ghost"
               size="icon"
-              className="md:hidden shrink-0 -ml-2 text-text-mute hover:text-text-main hover:bg-bg-base/50 rounded-xl"
+              className="md:hidden shrink-0 -ml-2 text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-xl"
               onClick={() => setMobileMenuOpen(true)}
             >
               <Menu className="h-5 w-5" />
@@ -139,14 +177,14 @@ export function ChatLayout() {
             <Button
               variant="ghost"
               size="icon"
-              className="hidden md:flex shrink-0 -ml-2 text-text-mute hover:text-text-main hover:bg-bg-base/50 rounded-xl transition-transform"
+              className="hidden md:flex shrink-0 -ml-2 text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-xl transition-all active:scale-95"
               onClick={() => setSidebarOpen(!sidebarOpen)}
             >
-              <SidebarIcon className={`h-5 w-5 transition-transform duration-300 ${!sidebarOpen ? 'rotate-180' : ''}`} />
+              <SidebarIcon className={`h-5 w-5 transition-transform duration-500 ${!sidebarOpen ? 'rotate-180' : ''}`} />
             </Button>
 
             <div className="flex flex-col min-w-0 flex-1 md:text-left text-center">
-              <h1 className="font-bold text-[11px] tracking-[0.3em] truncate text-text-mute uppercase opacity-60">
+              <h1 className="font-bold text-[10px] tracking-[0.4em] truncate text-muted-foreground/60 uppercase">
                 {activeTopic ? activeTopic.name : t("New Chat")}
               </h1>
             </div>
@@ -154,7 +192,7 @@ export function ChatLayout() {
             <Button
               variant="ghost"
               size="icon"
-              className="shrink-0 -mr-2 text-text-mute hover:text-text-main hover:bg-bg-base/50 rounded-xl"
+              className="shrink-0 -mr-2 text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-xl transition-all active:scale-95"
               onClick={() => chat.selectTopic(null)}
             >
               <Plus className="h-5 w-5" />
@@ -166,12 +204,14 @@ export function ChatLayout() {
         <AnimatePresence>
           {chat.error && (
             <motion.div 
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: "auto", opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              className="bg-destructive/5 text-destructive px-6 py-2.5 text-[12px] font-bold text-center border-b border-destructive/10 z-30 shrink-0 uppercase tracking-wider"
+              initial={{ y: -20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: -20, opacity: 0 }}
+              className="px-6 py-3 z-30 shrink-0"
             >
-              {chat.error}
+              <div className="bg-destructive/10 text-destructive text-[12px] font-bold text-center border border-destructive/20 py-2 rounded-xl uppercase tracking-wider backdrop-blur-md shadow-sm">
+                {chat.error}
+              </div>
             </motion.div>
           )}
         </AnimatePresence>

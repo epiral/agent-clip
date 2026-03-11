@@ -3,6 +3,8 @@ import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import { setConfig, type AgentConfig } from "../lib/agent";
 import { useI18n } from "../lib/i18n";
+import { motion } from "framer-motion";
+import { Sparkles } from "lucide-react";
 
 const PROVIDER_PRESETS: Record<string, { label: string; base_url: string; protocol: string; models: string[] }> = {
   openrouter: {
@@ -118,122 +120,148 @@ export function SetupPage({ config, onComplete }: SetupPageProps) {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-[100dvh] bg-bg-base p-4">
-      <div className="w-full max-w-md space-y-8 animate-in-up">
-        <div className="text-center space-y-2">
-          <h1 className="text-2xl font-bold text-text-main">{t("Setup Agent")}</h1>
-          <p className="text-sm text-text-mute">{t("Configure your AI provider to get started")}</p>
+    <div className="flex items-center justify-center min-h-[100dvh] bg-background p-6 relative overflow-hidden">
+      {/* Background Decor */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
+        <div className="absolute -top-[10%] -left-[10%] w-[40%] h-[40%] bg-primary/5 rounded-full blur-[120px]" />
+        <div className="absolute bottom-[10%] -right-[5%] w-[30%] h-[30%] bg-primary/3 rounded-full blur-[100px]" />
+      </div>
+
+      <motion.div 
+        initial={{ opacity: 0, y: 20, scale: 0.95 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.6, ease: [0.23, 1, 0.32, 1] }}
+        className="w-full max-w-lg space-y-10 relative z-10"
+      >
+        <div className="text-center space-y-3">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-[2rem] bg-primary/10 text-primary mb-2 ring-1 ring-primary/20 shadow-glow">
+            <Sparkles className="w-8 h-8" />
+          </div>
+          <h1 className="text-4xl font-bold tracking-tight text-foreground">{t("Setup Agent")}</h1>
+          <p className="text-muted-foreground/60 font-medium">{t("Configure your AI provider to get started")}</p>
         </div>
 
         {error && (
-          <div className="text-destructive text-sm bg-destructive/10 p-3 rounded-lg border border-destructive/20">
+          <motion.div 
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            className="text-destructive text-sm bg-destructive/5 p-4 rounded-2xl border border-destructive/10 font-bold uppercase tracking-wider text-center"
+          >
             {error}
-          </div>
+          </motion.div>
         )}
 
-        <div className="space-y-6">
-          {/* Name */}
-          <div className="space-y-2">
-            <label className="text-xs font-semibold text-text-mute uppercase tracking-wider">{t("Agent Name")}</label>
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="pi"
-              className="h-11 rounded-lg bg-bg-surface border-border text-sm"
-            />
-          </div>
+        <div className="bento-surface p-8 space-y-8 bg-card/50 backdrop-blur-xl border-border/40">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            {/* Identity */}
+            <div className="space-y-3">
+              <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">{t("Agent Name")}</label>
+              <Input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="pi"
+                className="h-12 rounded-xl bg-background/50 border-border/40 text-[15px] font-semibold focus-visible:ring-primary/20"
+              />
+            </div>
 
-          {/* Provider */}
-          <div className="space-y-2">
-            <label className="text-xs font-semibold text-text-mute uppercase tracking-wider">{t("AI Provider")}</label>
-            <div className="grid grid-cols-2 gap-2">
-              {Object.entries(PROVIDER_PRESETS).map(([key, p]) => (
-                <button
-                  key={key}
-                  onClick={() => handleProviderChange(key)}
-                  className={`px-3 py-2.5 rounded-lg text-sm font-medium border transition-all ${
-                    providerKey === key
-                      ? "border-brand-primary bg-brand-primary/10 text-brand-primary"
-                      : "border-border bg-bg-surface text-text-mute hover:border-border-subtle hover:text-text-main"
-                  }`}
-                >
-                  {p.label}
-                </button>
-              ))}
+            {/* Provider */}
+            <div className="space-y-3">
+              <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">{t("AI Provider")}</label>
+              <select
+                value={providerKey}
+                onChange={(e) => handleProviderChange(e.target.value)}
+                className="flex h-12 w-full rounded-xl border border-border/40 bg-background/50 px-4 py-2 text-[15px] font-semibold transition-all focus:outline-none focus:ring-2 focus:ring-primary/20 appearance-none cursor-pointer"
+              >
+                {Object.entries(PROVIDER_PRESETS).map(([key, p]) => (
+                  <option key={key} value={key}>{p.label}</option>
+                ))}
+              </select>
             </div>
           </div>
 
-          {/* Custom URL + Protocol */}
-          {isCustom && (
-            <>
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-text-mute uppercase tracking-wider">Base URL</label>
+          <div className="space-y-8 pt-4 border-t border-border/20">
+            {/* Custom URL + Protocol */}
+            {isCustom && (
+              <motion.div 
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                className="grid grid-cols-1 md:grid-cols-2 gap-8"
+              >
+                <div className="space-y-3">
+                  <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">Base URL</label>
+                  <Input
+                    value={customUrl}
+                    onChange={(e) => setCustomUrl(e.target.value)}
+                    placeholder="https://api.example.com/v1"
+                    className="h-12 rounded-xl bg-background/50 border-border/40 text-[13px] font-mono focus-visible:ring-primary/20"
+                  />
+                </div>
+                <div className="space-y-3">
+                  <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">Protocol</label>
+                  <select
+                    value={customProtocol}
+                    onChange={(e) => setCustomProtocol(e.target.value)}
+                    className="flex h-12 w-full rounded-xl border border-border/40 bg-background/50 px-4 py-2 text-[15px] font-semibold transition-all focus:outline-none focus:ring-2 focus:ring-primary/20 appearance-none cursor-pointer"
+                  >
+                    <option value="openai">OpenAI Compatible</option>
+                    <option value="anthropic">Anthropic</option>
+                  </select>
+                </div>
+              </motion.div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {/* API Key */}
+              <div className="space-y-3">
+                <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">API Key</label>
                 <Input
-                  value={customUrl}
-                  onChange={(e) => setCustomUrl(e.target.value)}
-                  placeholder="https://api.example.com/v1"
-                  className="h-11 rounded-lg bg-bg-surface border-border text-sm font-mono"
+                  type="password"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder="sk-..."
+                  className="h-12 rounded-xl bg-background/50 border-border/40 text-[13px] font-mono focus-visible:ring-primary/20"
                 />
               </div>
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-text-mute uppercase tracking-wider">Protocol</label>
-                <select
-                  value={customProtocol}
-                  onChange={(e) => setCustomProtocol(e.target.value)}
-                  className="flex h-11 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-brand-primary/20 appearance-none"
-                >
-                  <option value="openai">OpenAI Compatible</option>
-                  <option value="anthropic">Anthropic</option>
-                </select>
+
+              {/* Model */}
+              <div className="space-y-3">
+                <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">{t("Model")}</label>
+                {!isCustom && preset.models.length > 0 ? (
+                  <select
+                    value={model}
+                    onChange={(e) => setModel(e.target.value)}
+                    className="flex h-12 w-full rounded-xl border border-border/40 bg-background/50 px-4 py-2 text-[13px] font-mono transition-all focus:outline-none focus:ring-2 focus:ring-primary/20 appearance-none cursor-pointer"
+                  >
+                    {preset.models.map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <Input
+                    value={customModel}
+                    onChange={(e) => setCustomModel(e.target.value)}
+                    placeholder="model-name"
+                    className="h-12 rounded-xl bg-background/50 border-border/40 text-[13px] font-mono focus-visible:ring-primary/20"
+                  />
+                )}
               </div>
-            </>
-          )}
-
-          {/* API Key */}
-          <div className="space-y-2">
-            <label className="text-xs font-semibold text-text-mute uppercase tracking-wider">API Key</label>
-            <Input
-              type="password"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder="sk-..."
-              className="h-11 rounded-lg bg-bg-surface border-border text-sm font-mono"
-            />
+            </div>
           </div>
 
-          {/* Model */}
-          <div className="space-y-2">
-            <label className="text-xs font-semibold text-text-mute uppercase tracking-wider">{t("Model")}</label>
-            {!isCustom && preset.models.length > 0 ? (
-              <select
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                className="flex h-11 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-brand-primary/20 appearance-none"
-              >
-                {preset.models.map((m) => (
-                  <option key={m} value={m}>{m}</option>
-                ))}
-              </select>
-            ) : (
-              <Input
-                value={customModel}
-                onChange={(e) => setCustomModel(e.target.value)}
-                placeholder="model-name"
-                className="h-11 rounded-lg bg-bg-surface border-border text-sm font-mono"
-              />
-            )}
-          </div>
+          {/* Submit */}
+          <Button
+            className="w-full h-14 rounded-2xl text-[15px] font-bold shadow-glow hover:brightness-110 active:scale-[0.98] transition-all disabled:opacity-50"
+            disabled={!canSubmit || saving}
+            onClick={handleSubmit}
+          >
+            {saving ? t("Saving...") : t("Start Session")}
+          </Button>
         </div>
 
-        {/* Submit */}
-        <Button
-          className="w-full h-12 rounded-lg text-sm font-semibold"
-          disabled={!canSubmit || saving}
-          onClick={handleSubmit}
-        >
-          {saving ? t("Saving...") : t("Start")}
-        </Button>
-      </div>
+        <p className="text-center text-[10px] text-muted-foreground/30 font-bold uppercase tracking-[0.3em]">
+          Powered by Gemini Resonance Engine
+        </p>
+      </motion.div>
     </div>
   );
 }

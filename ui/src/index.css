@@ -5,6 +5,8 @@
 @source "../node_modules/@streamdown/cjk/dist/*.js";
 @source "../node_modules/@streamdown/math/dist/*.js";
 @source "../node_modules/@streamdown/mermaid/dist/*.js";
+
+/* Font imports */
 @import "@fontsource/inter/300.css";
 @import "@fontsource/inter/400.css";
 @import "@fontsource/inter/500.css";
@@ -12,133 +14,139 @@
 @import "@fontsource/inter/700.css";
 @import "@fontsource/jetbrains-mono/400.css";
 @import "@fontsource/jetbrains-mono/500.css";
-
-:root {
-  --shadow-tactile: 0 4px 30px rgb(0 0 0 / 0.08);
-  --shadow-glow: 0 0 8px var(--color-brand-primary);
-  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-bg-base: oklch(16% 0.01 240);
-    --color-bg-sidebar: oklch(13% 0.01 240);
-    --color-bg-surface: oklch(20% 0.01 240);
-    --color-brand-primary: oklch(68% 0.10 250);
-    --color-text-main: oklch(90% 0.005 240);
-    --color-text-mute: oklch(58% 0.01 240);
-    --color-border-subtle: oklch(24% 0.01 240);
-
-    --color-primary-foreground: oklch(16% 0.01 240);
-    --shadow-tactile: 0 4px 30px rgb(0 0 0 / 0.3);
-  }
-}
+@import "@fontsource-variable/noto-sans-sc/index.css";
 
 @theme {
-  --font-sans: "Inter", -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-sans: "Inter", "Noto Sans SC Variable", -apple-system, sans-serif;
   --font-mono: "JetBrains Mono", monospace;
 
-  /* Colors - Light (OKLCH) */
-  --color-bg-base: oklch(98% 0.005 240);
-  --color-bg-sidebar: oklch(96.5% 0.008 240);
-  --color-bg-surface: oklch(100% 0 0);
-  --color-brand-primary: oklch(60% 0.12 250);
-  --color-text-main: oklch(28% 0.01 240);
-  --color-text-mute: oklch(55% 0.01 240);
-  --color-border-subtle: oklch(90% 0.01 240);
-
-  /* Shadcn-like compatibility mapping */
-  --color-background: var(--color-bg-base);
-  --color-foreground: var(--color-text-main);
-  --color-card: var(--color-bg-surface);
-  --color-card-foreground: var(--color-text-main);
-  --color-popover: var(--color-bg-surface);
-  --color-popover-foreground: var(--color-text-main);
-  --color-primary: var(--color-brand-primary);
-  --color-primary-foreground: oklch(100% 0 0);
-  --color-secondary: oklch(94% 0.01 240);
-  --color-secondary-foreground: var(--color-text-main);
-  --color-muted: oklch(94% 0.01 240);
-  --color-muted-foreground: var(--color-text-mute);
-  --color-accent: oklch(94% 0.01 240);
-  --color-accent-foreground: var(--color-text-main);
-  --color-destructive: oklch(60% 0.15 25);
-  --color-destructive-foreground: oklch(98% 0.01 240);
-  --color-border: var(--color-border-subtle);
-  --color-input: var(--color-border-subtle);
-  --color-ring: var(--color-brand-primary);
+  /* Color System (OKLCH) - Light Mode Defaults */
+  --color-background: oklch(99.5% 0.002 240);
+  --color-foreground: oklch(22% 0.01 240);
   
-  --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
-  --radius-2xl: 24px;
-}
+  --color-card: oklch(100% 0 0);
+  --color-card-foreground: oklch(22% 0.01 240);
+  
+  --color-popover: oklch(100% 0 0);
+  --color-popover-foreground: oklch(22% 0.01 240);
+  
+  --color-primary: oklch(62% 0.16 255);
+  --color-primary-foreground: oklch(99% 0 0);
+  
+  --color-secondary: oklch(96% 0.005 240);
+  --color-secondary-foreground: oklch(22% 0.01 240);
+  
+  --color-muted: oklch(95% 0.008 240);
+  --color-muted-foreground: oklch(55% 0.01 240);
+  
+  --color-accent: oklch(96% 0.02 255);
+  --color-accent-foreground: oklch(22% 0.01 240);
+  
+  --color-destructive: oklch(60% 0.18 25);
+  --color-destructive-foreground: oklch(99% 0 0);
+  
+  --color-border: oklch(92% 0.008 240);
+  --color-input: oklch(92% 0.008 240);
+  --color-ring: color-mix(in srgb, var(--color-primary), transparent 50%);
+
+  /* Sidebar Tokens */
+  --color-sidebar: oklch(97% 0.005 240);
+  --color-sidebar-foreground: oklch(35% 0.01 240);
+  --color-sidebar-primary: oklch(62% 0.16 255);
+  --color-sidebar-primary-foreground: oklch(99% 0 0);
+  --color-sidebar-accent: oklch(94% 0.01 240);
+  --color-sidebar-accent-foreground: oklch(22% 0.01 240);
+  --color-sidebar-border: oklch(91% 0.008 240);
+  --color-sidebar-ring: oklch(62% 0.16 255 / 0.5);
+
+  /* Shadows & Radius */
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.25rem;
+  --radius-2xl: 1.5rem;
+
+  --shadow-tactile: 0 4px 30px rgb(0 0 0 / 0.08);
+  --shadow-glow: 0 0 12px color-mix(in srgb, var(--color-primary), transparent 70%);
+  --shadow-soft: 0 2px 10px rgb(0 0 0 / 0.04);
+  }
+
+  /* Dark Mode Overrides */
+  @media (prefers-color-scheme: dark) {
+  :root {
+    --color-background: oklch(14% 0.01 240);
+    --color-foreground: oklch(93% 0.005 240);
+
+    --color-card: oklch(17% 0.01 240);
+    --color-card-foreground: oklch(93% 0.005 240);
+
+    --color-popover: oklch(17% 0.01 240);
+    --color-popover-foreground: oklch(93% 0.005 240);
+
+    --color-primary: oklch(68% 0.18 255);
+    --color-primary-foreground: oklch(14% 0.01 240);
+
+    --color-secondary: oklch(22% 0.01 240);
+    --color-secondary-foreground: oklch(93% 0.005 240);
+
+    --color-muted: oklch(20% 0.01 240);
+    --color-muted-foreground: oklch(65% 0.01 240);
+
+    --color-accent: oklch(24% 0.04 255);
+    --color-accent-foreground: oklch(93% 0.005 240);
+
+    --color-destructive: oklch(55% 0.18 25);
+    --color-destructive-foreground: oklch(93% 0.005 240);
+
+    --color-border: oklch(24% 0.01 240);
+    --color-input: oklch(24% 0.01 240);
+    --color-ring: color-mix(in srgb, var(--color-primary), transparent 50%);
+
+    --color-sidebar: oklch(12% 0.01 240);
+    --color-sidebar-foreground: oklch(75% 0.01 240);
+    --color-sidebar-accent: oklch(18% 0.02 240);
+    --color-sidebar-border: oklch(20% 0.01 240);
+
+    --shadow-tactile: 0 10px 40px rgb(0 0 0 / 0.4);
+    --shadow-glow: 0 0 15px color-mix(in srgb, var(--color-primary), transparent 60%);
+  }
+  }
 
 @layer base {
   :root {
     color-scheme: light dark;
   }
   * {
-    @apply border-border/40;
+    @apply border-border/60;
   }
   body {
-    @apply bg-bg-base text-text-main font-sans antialiased;
+    @apply bg-background text-foreground font-sans antialiased;
     font-size: 14px;
     line-height: 1.6;
     letter-spacing: -0.01em;
   }
+  
+  /* Selection styling */
+  ::selection {
+    @apply bg-primary/20 text-foreground;
+  }
 }
 
 @layer utilities {
-  .glass-sidebar {
-    @apply bg-bg-sidebar/80 backdrop-blur-xl border-r border-border/40;
-  }
-
-  .animate-in-up {
-    animation: slide-up-fade 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  }
-
-  @keyframes slide-up-fade {
-    from {
-      opacity: 0;
-      transform: translateY(8px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  .spring-expand {
-    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-  }
-
-  .prose {
-    @apply text-text-main;
-    line-height: 1.65;
-  }
-  .prose p {
-    @apply mb-3 last:mb-0;
+  .glass {
+    @apply bg-background/70 backdrop-blur-xl border border-border/40;
   }
   
-  .prose pre {
-    @apply my-4 rounded-xl border border-border/40 bg-muted/30 p-4 font-mono text-sm leading-relaxed overflow-x-auto;
-  }
-  
-  .prose code {
-    @apply font-mono text-[0.9em] font-medium text-brand-primary bg-brand-primary/5 px-1.5 py-0.5 rounded-md;
-  }
-  
-  .prose pre code {
-    @apply p-0 text-text-main bg-transparent;
+  .glass-card {
+    @apply bg-card/60 backdrop-blur-md border border-border/40 shadow-soft;
   }
 
-  .select-field {
-    @apply flex h-10 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-brand-primary/20 appearance-none;
+  .bento-surface {
+    @apply bg-card border border-border/50 rounded-2xl shadow-tactile transition-all duration-300;
+  }
+
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-linear-to-br from-primary to-primary/60;
   }
 
   .no-scrollbar::-webkit-scrollbar {
@@ -148,4 +156,30 @@
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
+
+  /* Prose refinement */
+  .prose {
+    @apply text-[15px] leading-relaxed text-foreground/90;
+  }
+  .prose p {
+    @apply mb-4 last:mb-0;
+  }
+  .prose pre {
+    @apply my-6 rounded-xl border border-border/40 bg-muted/40 p-4 font-mono text-[13px] leading-relaxed overflow-x-auto shadow-sm;
+  }
+  .prose code:not(pre code) {
+    @apply font-mono text-[0.85em] font-semibold text-primary bg-primary/10 px-1.5 py-0.5 rounded-md;
+  }
+  .prose h1, .prose h2, .prose h3 {
+    @apply font-bold tracking-tight text-foreground mb-4 mt-8 first:mt-0;
+  }
+  .prose h1 { @apply text-2xl; }
+  .prose h2 { @apply text-xl; }
+  .prose h3 { @apply text-lg; }
+  .prose ul, .prose ol {
+    @apply my-4 pl-6 space-y-2;
+  }
+  .prose ul { @apply list-disc; }
+  .prose ol { @apply list-decimal; }
+  .prose li { @apply pl-1; }
 }

@@ -51,49 +51,60 @@ export function MessageBubble({ message, agentName }: MessageBubbleProps) {
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 10 }}
+      initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
-      className={`w-full py-6 px-4 md:px-8 group transition-colors ${
-        isUser ? "bg-transparent" : "bg-bg-surface/40 backdrop-blur-[2px]"
+      transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
+      className={`w-full group transition-all ${
+        isUser ? "bg-transparent" : "relative"
       }`}
     >
-      <div className="max-w-3xl mx-auto flex gap-4 md:gap-6">
+      {!isUser && (
+        <div className="absolute inset-0 bg-card/40 backdrop-blur-[2px] border border-border/40 rounded-[2rem] -mx-4 md:-mx-6 z-0" />
+      )}
+      
+      <div className="relative z-10 py-8 px-4 md:px-6 flex gap-4 md:gap-8">
         <div className="flex-shrink-0 pt-1">
           {isUser ? (
-            <div className="h-8 w-8 rounded-full bg-border/40 flex items-center justify-center text-text-mute ring-1 ring-border/20">
-              <User className="h-4 w-4" />
+            <div className="h-10 w-10 rounded-2xl bg-muted/50 flex items-center justify-center text-muted-foreground ring-1 ring-border/50 shadow-sm">
+              <User className="h-5 w-5" />
             </div>
           ) : (
-            <div className="h-8 w-8 rounded-full bg-brand-primary/10 flex items-center justify-center text-brand-primary ring-1 ring-brand-primary/20">
-              <Sparkles className="h-4 w-4" />
+            <div className="h-10 w-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary ring-1 ring-primary/20 shadow-glow relative overflow-hidden">
+              <Sparkles className="h-5 w-5" />
+              <motion.div 
+                animate={{ rotate: 360 }}
+                transition={{ repeat: Infinity, duration: 8, ease: "linear" }}
+                className="absolute inset-0 bg-linear-to-tr from-transparent via-primary/5 to-transparent"
+              />
             </div>
           )}
         </div>
 
-        <div className="flex-1 min-w-0 space-y-2">
-          <div className="flex items-center gap-2 mb-1">
-            <span className={`text-[12px] font-bold tracking-tight uppercase ${isUser ? 'text-text-main' : 'text-brand-primary'}`}>
-              {isUser ? t("YOU") : (agentName || "AGENT")}
-            </span>
-            {!isUser && isStreaming && (
-              <div className="flex items-center gap-1.5 ml-1">
-                <span className="flex h-1.5 w-1.5 rounded-full bg-brand-primary animate-pulse" />
-                <span className="text-[11px] text-brand-primary/60 font-medium tracking-wide animate-pulse">
-                  {t("Responding...")}
-                </span>
-              </div>
-            )}
+        <div className="flex-1 min-w-0 space-y-3">
+          <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center gap-2.5">
+              <span className={`text-[11px] font-bold tracking-[0.2em] uppercase ${isUser ? 'text-muted-foreground' : 'text-primary'}`}>
+                {isUser ? t("YOU") : (agentName || "AGENT")}
+              </span>
+              {!isUser && isStreaming && (
+                <div className="flex items-center gap-2 px-2 py-0.5 rounded-full bg-primary/5 border border-primary/10">
+                  <span className="flex h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+                  <span className="text-[10px] text-primary/80 font-bold tracking-wider uppercase animate-pulse">
+                    {t("Responding")}
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
 
-          <div className="w-full space-y-4 overflow-hidden min-w-0">
+          <div className="w-full space-y-6 overflow-hidden min-w-0">
             <AnimatePresence mode="popLayout">
               {message.blocks.map((block, idx) => (
                 <motion.div
                   key={idx}
-                  initial={{ opacity: 0, y: 4 }}
+                  initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: idx * 0.05 }}
+                  transition={{ delay: idx * 0.1, duration: 0.4 }}
                 >
                   <BlockRenderer
                     block={block}
@@ -105,29 +116,44 @@ export function MessageBubble({ message, agentName }: MessageBubbleProps) {
             </AnimatePresence>
 
             {isStreaming && message.blocks.length === 0 && (
-              <div className="flex h-6 items-center gap-1.5 ml-1">
-                <span className="w-1.5 h-1.5 bg-brand-primary/60 rounded-full animate-bounce [animation-delay:-0.3s]" />
-                <span className="w-1.5 h-1.5 bg-brand-primary/60 rounded-full animate-bounce [animation-delay:-0.15s]" />
-                <span className="w-1.5 h-1.5 bg-brand-primary/60 rounded-full animate-bounce" />
+              <div className="flex h-8 items-center gap-2 ml-1">
+                <motion.span 
+                  animate={{ scale: [1, 1.2, 1], opacity: [0.5, 1, 0.5] }}
+                  transition={{ repeat: Infinity, duration: 1, delay: 0 }}
+                  className="w-2 h-2 bg-primary/40 rounded-full" 
+                />
+                <motion.span 
+                  animate={{ scale: [1, 1.2, 1], opacity: [0.5, 1, 0.5] }}
+                  transition={{ repeat: Infinity, duration: 1, delay: 0.2 }}
+                  className="w-2 h-2 bg-primary/40 rounded-full" 
+                />
+                <motion.span 
+                  animate={{ scale: [1, 1.2, 1], opacity: [0.5, 1, 0.5] }}
+                  transition={{ repeat: Infinity, duration: 1, delay: 0.4 }}
+                  className="w-2 h-2 bg-primary/40 rounded-full" 
+                />
               </div>
             )}
 
             {message.status === "error" && (
               <motion.div 
-                initial={{ scale: 0.95, opacity: 0 }}
+                initial={{ scale: 0.98, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
-                className="text-destructive text-[13px] p-4 bg-destructive/5 border border-destructive/10 rounded-xl flex gap-3 items-start"
+                className="text-destructive text-[13px] p-5 bg-destructive/5 border border-destructive/10 rounded-2xl flex gap-4 items-start backdrop-blur-sm"
               >
-                <div className="h-5 w-5 rounded-full bg-destructive/10 flex items-center justify-center shrink-0 mt-0.5">
-                  <span className="font-bold text-[10px]">!</span>
+                <div className="h-6 w-6 rounded-xl bg-destructive/10 flex items-center justify-center shrink-0 mt-0.5">
+                  <span className="font-bold text-[12px]">!</span>
                 </div>
-                <div>{message.blocks.find(b => b.type === "text")?.content || "An error occurred during generation."}</div>
+                <div className="font-medium leading-relaxed">
+                  {message.blocks.find(b => b.type === "text")?.content || "An error occurred during generation."}
+                </div>
               </motion.div>
             )}
           </div>
         </div>
       </div>
     </motion.div>
+
   );
 }
 

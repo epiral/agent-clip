@@ -117,13 +117,13 @@ export function ChatComposer({ onSend, onCancel, isStreaming, agentName }: ChatC
 
   return (
     <div
-      className="w-full max-w-3xl mx-auto px-4 pb-6"
+      className="w-full max-w-4xl mx-auto px-4 pb-10"
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      <div className={`relative flex flex-col bg-bg-surface border-2 rounded-2xl transition-all duration-300 shadow-xl overflow-hidden ${
-        isDragging ? "border-brand-primary bg-brand-primary/5 scale-[1.01]" : "border-border/60 focus-within:border-brand-primary/40 focus-within:ring-4 focus-within:ring-brand-primary/5"
+      <div className={`relative flex flex-col bg-card border-2 rounded-[2rem] transition-all duration-500 shadow-tactile overflow-hidden ${
+        isDragging ? "border-primary bg-primary/5 scale-[1.02]" : "border-border/40 focus-within:border-primary/40 focus-within:ring-[12px] focus-within:ring-primary/5"
       }`}>
         <AnimatePresence>
           {attachments.length > 0 && (
@@ -131,7 +131,7 @@ export function ChatComposer({ onSend, onCancel, isStreaming, agentName }: ChatC
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: "auto", opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
-              className="flex gap-3 px-4 pt-4 overflow-x-auto no-scrollbar"
+              className="flex gap-4 px-6 pt-6 overflow-x-auto no-scrollbar"
             >
               {attachments.map((att, i) => (
                 <motion.div 
@@ -141,17 +141,20 @@ export function ChatComposer({ onSend, onCancel, isStreaming, agentName }: ChatC
                   animate={{ scale: 1, opacity: 1 }}
                   className="relative shrink-0 group/thumb"
                 >
-                  <img
-                    src={att.preview}
-                    alt={att.file.name}
-                    className="h-20 w-20 object-cover rounded-xl border border-border/40 shadow-sm"
-                  />
+                  <div className="relative h-24 w-24 rounded-2xl overflow-hidden border-2 border-border/40 shadow-sm transition-transform group-hover/thumb:scale-[1.05]">
+                    <img
+                      src={att.preview}
+                      alt={att.file.name}
+                      className="h-full w-full object-cover"
+                    />
+                    <div className="absolute inset-0 bg-black/0 group-hover/thumb:bg-black/20 transition-colors" />
+                  </div>
                   <button
                     type="button"
                     onClick={() => removeAttachment(i)}
-                    className="absolute -top-2 -right-2 w-6 h-6 bg-bg-surface border border-border rounded-full flex items-center justify-center shadow-md opacity-0 group-hover/thumb:opacity-100 transition-opacity hover:bg-destructive hover:text-white hover:border-destructive"
+                    className="absolute -top-2 -right-2 w-7 h-7 bg-background border border-border rounded-full flex items-center justify-center shadow-md opacity-0 group-hover/thumb:opacity-100 transition-all hover:bg-destructive hover:text-white hover:border-destructive hover:scale-110 active:scale-90"
                   >
-                    <X className="h-3 w-3" />
+                    <X className="h-3.5 w-3.5" />
                   </button>
                 </motion.div>
               ))}
@@ -159,14 +162,14 @@ export function ChatComposer({ onSend, onCancel, isStreaming, agentName }: ChatC
           )}
         </AnimatePresence>
 
-        <div className="flex items-end p-2">
-          <div className="flex items-center h-[44px] ml-1">
+        <div className="flex items-end p-3 md:p-4 gap-2">
+          <div className="flex items-center h-[52px]">
             <Button
               type="button"
               size="icon"
               variant="ghost"
               onClick={() => fileInputRef.current?.click()}
-              className="h-9 w-9 text-text-mute/60 hover:text-brand-primary hover:bg-brand-primary/5 rounded-xl transition-all"
+              className="h-10 w-10 text-muted-foreground/50 hover:text-primary hover:bg-primary/5 rounded-2xl transition-all active:scale-90"
               disabled={isStreaming}
             >
               <Paperclip className="h-5 w-5" />
@@ -191,11 +194,11 @@ export function ChatComposer({ onSend, onCancel, isStreaming, agentName }: ChatC
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
             placeholder={t("Ask {name} anything...", { name: agentName || "Agent" })}
-            className="flex-1 min-h-[44px] max-h-[240px] resize-none border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 px-3 py-3 text-[15px] leading-relaxed placeholder:text-text-mute/40 font-medium no-scrollbar"
+            className="flex-1 min-h-[52px] max-h-[240px] resize-none border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 px-2 py-3.5 text-[16px] leading-relaxed placeholder:text-muted-foreground/30 font-medium no-scrollbar"
             rows={1}
           />
 
-          <div className="flex items-center h-[44px] mr-1">
+          <div className="flex items-center h-[52px]">
             <AnimatePresence mode="wait">
               {isStreaming ? (
                 <motion.div
@@ -208,9 +211,9 @@ export function ChatComposer({ onSend, onCancel, isStreaming, agentName }: ChatC
                     size="icon"
                     variant="ghost"
                     onClick={onCancel}
-                    className="h-9 w-9 text-destructive hover:bg-destructive/10 rounded-xl transition-all"
+                    className="h-10 w-10 text-destructive hover:bg-destructive/10 rounded-2xl transition-all active:scale-90"
                   >
-                    <Square className="h-3 w-3 fill-current" />
+                    <Square className="h-4 w-4 fill-current" />
                   </Button>
                 </motion.div>
               ) : (
@@ -224,10 +227,10 @@ export function ChatComposer({ onSend, onCancel, isStreaming, agentName }: ChatC
                     size="icon"
                     onClick={handleSend}
                     disabled={!hasContent}
-                    className={`h-9 w-9 rounded-xl transition-all duration-300 ${
+                    className={`h-10 w-10 rounded-2xl transition-all duration-300 active:scale-90 ${
                       hasContent
-                        ? "bg-brand-primary text-white shadow-glow hover:brightness-110 active:scale-90"
-                        : "bg-muted/50 text-text-mute/20"
+                        ? "bg-primary text-primary-foreground shadow-glow hover:brightness-110"
+                        : "bg-muted/50 text-muted-foreground/20"
                     }`}
                   >
                     <ArrowUp className="h-5 w-5 stroke-[3]" />
@@ -238,9 +241,15 @@ export function ChatComposer({ onSend, onCancel, isStreaming, agentName }: ChatC
           </div>
         </div>
       </div>
-      <div className="mt-3 flex items-center justify-center gap-4 text-[11px] text-text-mute/30 font-bold tracking-wider uppercase transition-opacity duration-500">
-        <span className="flex items-center gap-1.5"><Terminal className="w-3 h-3" /> Transmit (Enter)</span>
-        <span className="flex items-center gap-1.5"><ImageIcon className="w-3 h-3" /> Multi-line (Shift+Enter)</span>
+      <div className="mt-4 flex items-center justify-center gap-6 text-[10px] text-muted-foreground/40 font-bold tracking-[0.15em] uppercase transition-opacity duration-500">
+        <span className="flex items-center gap-2 group cursor-default">
+          <Terminal className="w-3.5 h-3.5 opacity-50 group-hover:text-primary transition-colors" /> 
+          Transmit (Enter)
+        </span>
+        <span className="flex items-center gap-2 group cursor-default">
+          <ImageIcon className="w-3.5 h-3.5 opacity-50 group-hover:text-primary transition-colors" /> 
+          Multi-line (Shift+Enter)
+        </span>
       </div>
     </div>
   );
