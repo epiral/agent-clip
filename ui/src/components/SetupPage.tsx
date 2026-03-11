@@ -23,19 +23,25 @@ const PROVIDER_PRESETS: Record<string, { label: string; base_url: string; protoc
     label: "OpenAI",
     base_url: "https://api.openai.com/v1",
     protocol: "openai",
-    models: ["gpt-4o", "gpt-4o-mini"],
+    models: ["gpt-4o", "gpt-4o-mini", "o1", "o3-mini"],
   },
   anthropic: {
     label: "Anthropic",
     base_url: "https://api.anthropic.com",
     protocol: "anthropic",
-    models: ["claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022"],
+    models: ["claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022", "claude-3-opus-20240229"],
   },
   dashscope: {
     label: "DashScope (Qwen)",
     base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1",
     protocol: "openai",
-    models: ["qwen-max", "qwen-plus"],
+    models: ["qwen-max", "qwen-plus", "qwen-turbo"],
+  },
+  minimax: {
+    label: "MiniMax",
+    base_url: "https://api.minimaxi.com/anthropic",
+    protocol: "anthropic",
+    models: ["MiniMax-M2.5", "MiniMax-M2.5-highspeed"],
   },
   deepseek: {
     label: "DeepSeek",
@@ -110,11 +116,11 @@ export function SetupPage({ config, onComplete }: SetupPageProps) {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-[100dvh] bg-paper p-6 relative">
-      <div className="w-full max-w-lg space-y-12">
+    <div className="flex items-center justify-center min-h-[100dvh] bg-paper p-6 relative overflow-hidden">
+      <div className="w-full max-w-lg space-y-12 relative z-10">
         <div className="text-center space-y-6">
-          <div className="inline-flex items-center justify-center w-16 h-16 border-2 border-ink text-ink mb-4">
-            <Sparkles className="w-8 h-8" />
+          <div className="inline-flex items-center justify-center w-20 h-20 border border-ink text-ink mb-2">
+            <Sparkles className="w-10 h-10" />
           </div>
           <h1 className="text-5xl font-serif font-bold tracking-tight text-ink">{t("Setup Agent")}</h1>
           <p className="signature-label text-muted">{t("Configure your AI provider to get started")}</p>
@@ -126,57 +132,71 @@ export function SetupPage({ config, onComplete }: SetupPageProps) {
           </div>
         )}
 
-        <div className="border border-border p-8 space-y-8 bg-surface">
+        <div className="border border-border p-8 space-y-10 bg-surface">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             {/* Identity */}
             <div className="space-y-3">
-              <label className="signature-label text-muted">{t("Agent Name")}</label>
+              <label className="signature-label text-muted font-mono">{t("Agent Name")}</label>
               <Input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="pi"
-                className="h-10 border border-border px-3 bg-paper"
+                className="h-10 border border-border px-3 bg-paper focus-visible:border-ink"
               />
             </div>
 
             {/* Provider */}
             <div className="space-y-3">
-              <label className="signature-label text-muted">{t("AI Provider")}</label>
-              <select
-                value={providerKey}
-                onChange={(e) => handleProviderChange(e.target.value)}
-                className="flex h-10 w-full border border-border bg-paper px-3 py-2 text-sm transition-colors focus:outline-none focus:border-ink appearance-none cursor-pointer"
-              >
-                {Object.entries(PROVIDER_PRESETS).map(([key, p]) => (
-                  <option key={key} value={key}>{p.label}</option>
-                ))}
-              </select>
+              <label className="signature-label text-muted font-mono">{t("AI Provider")}</label>
+              <div className="relative">
+                <select
+                  value={providerKey}
+                  onChange={(e) => handleProviderChange(e.target.value)}
+                  className="flex h-10 w-full border border-border bg-paper px-3 py-2 text-sm transition-colors focus:outline-none focus:border-ink appearance-none cursor-pointer"
+                >
+                  {Object.entries(PROVIDER_PRESETS).map(([key, p]) => (
+                    <option key={key} value={key}>{p.label}</option>
+                  ))}
+                </select>
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-muted">
+                  <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="square"/>
+                  </svg>
+                </div>
+              </div>
             </div>
           </div>
 
-          <div className="space-y-8 pt-6 border-t border-border">
+          <div className="space-y-10 pt-8 border-t border-border">
             {/* Custom URL + Protocol */}
             {isCustom && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-in fade-in slide-in-from-top-2 duration-300">
                 <div className="space-y-3">
-                  <label className="signature-label text-muted">Base URL</label>
+                  <label className="signature-label text-muted font-mono">Base URL</label>
                   <Input
                     value={customUrl}
                     onChange={(e) => setCustomUrl(e.target.value)}
                     placeholder="https://api.example.com/v1"
-                    className="h-10 border border-border px-3 font-mono text-xs bg-paper"
+                    className="h-10 border border-border px-3 font-mono text-xs bg-paper focus-visible:border-ink"
                   />
                 </div>
                 <div className="space-y-3">
-                  <label className="signature-label text-muted">Protocol</label>
-                  <select
-                    value={customProtocol}
-                    onChange={(e) => setCustomProtocol(e.target.value)}
-                    className="flex h-10 w-full border border-border bg-paper px-3 py-2 text-sm transition-colors focus:outline-none focus:border-ink appearance-none cursor-pointer"
-                  >
-                    <option value="openai">OpenAI Compatible</option>
-                    <option value="anthropic">Anthropic</option>
-                  </select>
+                  <label className="signature-label text-muted font-mono">Protocol</label>
+                  <div className="relative">
+                    <select
+                      value={customProtocol}
+                      onChange={(e) => setCustomProtocol(e.target.value)}
+                      className="flex h-10 w-full border border-border bg-paper px-3 py-2 text-sm transition-colors focus:outline-none focus:border-ink appearance-none cursor-pointer"
+                    >
+                      <option value="openai">OpenAI Compatible</option>
+                      <option value="anthropic">Anthropic</option>
+                    </select>
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-muted">
+                      <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="square"/>
+                      </svg>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -184,35 +204,42 @@ export function SetupPage({ config, onComplete }: SetupPageProps) {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               {/* API Key */}
               <div className="space-y-3">
-                <label className="signature-label text-muted">API Key</label>
+                <label className="signature-label text-muted font-mono">API Key</label>
                 <Input
                   type="password"
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
                   placeholder="sk-..."
-                  className="h-10 border border-border px-3 font-mono text-xs bg-paper"
+                  className="h-10 border border-border px-3 font-mono text-xs bg-paper focus-visible:border-ink"
                 />
               </div>
 
               {/* Model */}
               <div className="space-y-3">
-                <label className="signature-label text-muted">{t("Model")}</label>
+                <label className="signature-label text-muted font-mono">{t("Model")}</label>
                 {!isCustom && preset.models.length > 0 ? (
-                  <select
-                    value={model}
-                    onChange={(e) => setModel(e.target.value)}
-                    className="flex h-10 w-full border border-border bg-paper px-3 py-2 text-sm font-mono transition-colors focus:outline-none focus:border-ink appearance-none cursor-pointer"
-                  >
-                    {preset.models.map((m) => (
-                      <option key={m} value={m}>{m}</option>
-                    ))}
-                  </select>
+                  <div className="relative">
+                    <select
+                      value={model}
+                      onChange={(e) => setModel(e.target.value)}
+                      className="flex h-10 w-full border border-border bg-paper px-3 py-2 text-sm font-mono transition-colors focus:outline-none focus:border-ink appearance-none cursor-pointer"
+                    >
+                      {preset.models.map((m) => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-muted">
+                      <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="square"/>
+                      </svg>
+                    </div>
+                  </div>
                 ) : (
                   <Input
                     value={customModel}
                     onChange={(e) => setCustomModel(e.target.value)}
                     placeholder="model-name"
-                    className="h-10 border border-border px-3 font-mono text-xs bg-paper"
+                    className="h-10 border border-border px-3 font-mono text-xs bg-paper focus-visible:border-ink"
                   />
                 )}
               </div>
@@ -221,7 +248,7 @@ export function SetupPage({ config, onComplete }: SetupPageProps) {
 
           {/* Submit */}
           <Button
-            className="w-full h-12 text-[14px] font-bold"
+            className="w-full h-14 text-[14px] font-bold uppercase tracking-[0.2em]"
             disabled={!canSubmit || saving}
             onClick={handleSubmit}
           >
