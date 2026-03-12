@@ -181,9 +181,12 @@ providers:
   openrouter:
     base_url: https://openrouter.ai/api/v1
     api_key: <key>
+  minimax:
+    base_url: https://api.minimax.io/v1
+    api_key: <key>
 
-llm_provider: openrouter
-llm_model: anthropic/claude-3.5-haiku
+llm_provider: openrouter          # or: minimax
+llm_model: anthropic/claude-3.5-haiku  # MiniMax: MiniMax-M2.5 / MiniMax-M2.5-highspeed
 embedding_provider: openrouter
 embedding_model: openai/text-embedding-3-small
 

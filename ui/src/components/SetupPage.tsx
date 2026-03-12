@@ -39,8 +39,8 @@ const PROVIDER_PRESETS: Record<string, { label: string; base_url: string; protoc
   },
   minimax: {
     label: "MiniMax",
-    base_url: "https://api.minimaxi.com/anthropic",
-    protocol: "anthropic",
+    base_url: "https://api.minimax.io/v1",
+    protocol: "openai",
     models: ["MiniMax-M2.5", "MiniMax-M2.5-highspeed"],
   },
   deepseek: {

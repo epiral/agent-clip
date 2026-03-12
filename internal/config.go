@@ -99,6 +99,10 @@ func (c *Config) getProvider(name string) (*ProviderConfig, error) {
 	if envKey != "" && name == "openrouter" {
 		p.APIKey = envKey
 	}
+	mmKey := os.Getenv("MINIMAX_API_KEY")
+	if mmKey != "" && name == "minimax" {
+		p.APIKey = mmKey
+	}
 	return &p, nil
 }
 
