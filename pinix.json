@@ -1,0 +1,55 @@
+{
+  "name": "agent",
+  "version": "0.2.0",
+  "type": "clip",
+  "description": "AI Agent — agentic loop with memory, tools, and vision",
+  "domain": "ai",
+  "runtime": "bun",
+  "main": "index.ts",
+  "web": "web/",
+  "commands": [
+    {
+      "name": "send",
+      "description": "发送消息并执行 agentic loop"
+    },
+    {
+      "name": "create-topic",
+      "description": "创建新话题"
+    },
+    {
+      "name": "list-topics",
+      "description": "列出所有话题"
+    },
+    {
+      "name": "get-topic",
+      "description": "读取话题消息和活动 Run"
+    },
+    {
+      "name": "get-run",
+      "description": "获取运行状态"
+    },
+    {
+      "name": "cancel-run",
+      "description": "取消运行"
+    },
+    {
+      "name": "config",
+      "description": "配置管理"
+    },
+    {
+      "name": "skill",
+      "description": "技能管理"
+    },
+    {
+      "name": "upload",
+      "description": "上传附件"
+    },
+    {
+      "name": "event-check",
+      "description": "检查并触发到期事件"
+    }
+  ],
+  "dependencies": {
+    "browser": "^1.0.0"
+  }
+}
