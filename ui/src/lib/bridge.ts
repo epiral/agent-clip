@@ -144,91 +144,6 @@ function emitPayload(payload: unknown, onEvent: (event: StreamEvent) => void): v
   }
 }
 
-class StreamResponseParser {
-  private mode: "unknown" | "raw" | "json-string" = "unknown";
-  private rawBuffer = "";
-  private jsonStringBuffer = "";
-  private readonly onEvent: (event: StreamEvent) => void;
-
-  constructor(onEvent: (event: StreamEvent) => void) {
-    this.onEvent = onEvent;
-  }
-
-  push(chunk: string): void {
-    if (!chunk) {
-      return;
-    }
-
-    if (this.mode === "unknown") {
-      this.rawBuffer += chunk;
-      const firstNonWhitespace = this.rawBuffer.match(/\S/);
-      if (!firstNonWhitespace) {
-        return;
-      }
-
-      if (firstNonWhitespace[0] === '"') {
-        this.mode = "json-string";
-        this.jsonStringBuffer = this.rawBuffer;
-        this.rawBuffer = "";
-        return;
-      }
-
-      this.mode = "raw";
-      const buffered = this.rawBuffer;
-      this.rawBuffer = "";
-      this.pushRaw(buffered);
-      return;
-    }
-
-    if (this.mode === "json-string") {
-      this.jsonStringBuffer += chunk;
-      return;
-    }
-
-    this.pushRaw(chunk);
-  }
-
-  finish(): void {
-    if (this.mode === "json-string") {
-      this.emitValueText(this.jsonStringBuffer);
-      this.jsonStringBuffer = "";
-      return;
-    }
-
-    if (this.rawBuffer.trim()) {
-      this.emitValueText(this.rawBuffer);
-      this.rawBuffer = "";
-    }
-  }
-
-  private pushRaw(chunk: string): void {
-    this.rawBuffer += chunk;
-    const lines = this.rawBuffer.split("\n");
-    this.rawBuffer = lines.pop() ?? "";
-
-    for (const line of lines) {
-      this.emitValueText(line);
-    }
-  }
-
-  private emitValueText(text: string): void {
-    const trimmed = text.trim();
-    if (!trimmed) {
-      return;
-    }
-
-    try {
-      emitPayload(JSON.parse(trimmed), this.onEvent);
-      return;
-    } catch {
-      // If the body is a JSONL blob inside a JSON string, emitPayload handles it.
-      // Raw non-JSON fragments are ignored.
-    }
-
-    emitJSONL(trimmed, this.onEvent);
-  }
-}
-
 /** invoke a command, return parsed JSON response or raw string */
 export async function invoke<T = unknown>(
   command: string,
@@ -276,7 +191,15 @@ async function streamCommand(
   let response: Response;
 
   try {
-    response = await postCommand(command, opts, signal);
+    response = await fetch(commandURL(command), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "text/event-stream",
+      },
+      body: JSON.stringify(opts),
+      signal,
+    });
   } catch (error) {
     return isAbortError(error) || signal.aborted ? null : -1;
   }
@@ -293,21 +216,62 @@ async function streamCommand(
     return 0;
   }
 
-  const parser = new StreamResponseParser(onEvent);
+  // Parse SSE stream: "data: {...}\n\n" or "event: done\ndata: {}\n\n"
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
+  let buffer = "";
 
   try {
     while (true) {
       const { value, done } = await reader.read();
-      if (done) {
-        break;
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      const parts = buffer.split("\n\n");
+      buffer = parts.pop() ?? "";
+
+      for (const part of parts) {
+        if (!part.trim()) continue;
+
+        // Check for "event: done"
+        if (part.includes("event: done")) {
+          onEvent({ type: "done" });
+          continue;
+        }
+
+        // Extract "data: ..." line
+        const dataMatch = part.match(/^data:\s*(.+)$/m);
+        if (!dataMatch) continue;
+
+        try {
+          const chunk = JSON.parse(dataMatch[1]);
+          // chunk could be a StreamEvent directly or a raw JSONL line
+          if (chunk && typeof chunk === "object" && "type" in chunk) {
+            onEvent(chunk as StreamEvent);
+          } else if (chunk && typeof chunk === "object" && "error" in chunk) {
+            onEvent({ type: "info", message: `Error: ${(chunk as { error: string }).error}` });
+          }
+        } catch {
+          // skip unparseable chunks
+        }
       }
-      parser.push(decoder.decode(value, { stream: true }));
     }
 
-    parser.push(decoder.decode());
-    parser.finish();
+    // Process remaining buffer
+    if (buffer.trim()) {
+      const dataMatch = buffer.match(/^data:\s*(.+)$/m);
+      if (dataMatch) {
+        try {
+          const chunk = JSON.parse(dataMatch[1]);
+          if (chunk && typeof chunk === "object" && "type" in chunk) {
+            onEvent(chunk as StreamEvent);
+          }
+        } catch {
+          // skip
+        }
+      }
+    }
+
     return 0;
   } catch (error) {
     return isAbortError(error) || signal.aborted ? null : -1;
