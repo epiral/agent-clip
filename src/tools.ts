@@ -1,3 +1,4 @@
+import { invoke } from '@pinixai/core';
 import { Database } from 'bun:sqlite';
 import { parseChain, Operator } from './chain';
 import {
@@ -35,7 +36,6 @@ import { isImageFile } from './media';
 import { attachmentToURL, extractThinking, extractUserContent } from './sanitize';
 import { createSkill, deleteSkill, listSkills, loadSkill, updateSkill } from './skills';
 import { parseOptionalLineCountArgs, parsePositiveInt, safeJSONParse, toErrorMessage } from './shared';
-import { invoke } from './runtime';
 import { registerBrowserCommands } from './browser';
 
 type CommandHandler = (args: string[], stdin: string) => Promise<string> | string;

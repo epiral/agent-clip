@@ -1,9 +1,9 @@
+import { invoke } from "@pinixai/core";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { Config } from "./config";
 import { dataRoot } from "./paths";
 import { humanSize, pinixDataURLPrefix } from "./fs";
-import { invoke } from "./runtime";
 
 interface BrowserPageInfo {
   url?: string;

@@ -1,8 +1,6 @@
 // @ts-nocheck
-import { spawn, type ChildProcess } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { basename } from "node:path";
-import { Clip, command, handler, z } from "./src/pinix-core";
+import { Clip, command, handler, serveIPC, z } from "@pinixai/core";
 import { ensureConfigExists, configAddClip, configDelete, configRemoveClip, configSet, configToJSON, loadConfig, parseClipInput } from "./src/config";
 import { buildContext } from "./src/context";
 import {
@@ -21,20 +19,17 @@ import {
   openDB,
   readRunOutput,
   saveMessages,
-  updateRunPID,
   type Run,
 } from "./src/db";
 import { claimDueEvents } from "./src/events";
-import { ensureTopicDir, getCurrentTopic, setCurrentTopic } from "./src/fs";
+import { ensureTopicDir, setCurrentTopic, withCurrentTopic } from "./src/fs";
 import { runLoop } from "./src/loop";
 import { processMemory } from "./src/memory";
 import { createAsyncFileOutput, createJSONLChunkOutput, createOutput, type Output } from "./src/output";
-import { projectRoot, rootPath } from "./src/paths";
-import { registerRunController, unregisterRunController } from "./src/run-control";
-import { handleInvokeResponse, setIPCMode, setIPCTransport } from "./src/runtime";
-import { attachmentToURL, extractThinking, extractUserContent } from "./src/sanitize";
+import { rootPath } from "./src/paths";
+import { getRunController, registerRunController, unregisterRunController } from "./src/run-control";
 import { createSkill, deleteSkill, ensureSkillsDir, listSkills, loadSkill, updateSkill } from "./src/skills";
-import { nowUnix, randomID, readStdinText, safeJSONParse, toErrorMessage, truncateRunes } from "./src/shared";
+import { nowUnix, readStdinText, safeJSONParse, toErrorMessage, truncateRunes } from "./src/shared";
 import { buildRegistry, toWebMessage } from "./src/tools";
 import { appendAttachments, readImageAttachments, uploadFile, type UploadInput } from "./src/upload";
 
@@ -48,23 +43,6 @@ const AnyOutputSchema = z.any();
 type OutputFormat = "raw" | "jsonl";
 
 type InvocationInput = z.infer<typeof InvocationSchema>;
-
-interface IPCMessage {
-  id?: string;
-  type: "register" | "registered" | "invoke" | "result" | "error" | "chunk" | "done";
-  clip?: string;
-  command?: string;
-  input?: unknown;
-  output?: unknown;
-  error?: string;
-  manifest?: {
-    name: string;
-    domain: string;
-    description?: string;
-    commands: Array<{ name: string; description?: string }>;
-    dependencies: string[];
-  };
-}
 
 interface PinixFileManifest {
   name?: string;
@@ -89,13 +67,11 @@ interface ResolvedSendInput {
   isAsync: boolean;
 }
 
-interface WorkerPayload {
+interface RunExecution {
   runId: string;
   topicId: string;
   message: string;
   attachments: string[];
-  outputFormat: OutputFormat;
-  asyncFile: boolean;
 }
 
 interface WebRun {
@@ -124,52 +100,6 @@ interface SkillPayload {
   name: string;
   description: string;
   content: string;
-}
-
-interface WorkerSpawnOptions {
-  detached: boolean;
-  outputFormat: OutputFormat;
-  asyncFile: boolean;
-  stdio: ["ignore" | "pipe", "ignore" | "pipe", "ignore" | "pipe"];
-}
-
-class IPCResponder {
-  finished = false;
-  streamed = false;
-
-  constructor(private readonly id: string, private readonly send: (message: IPCMessage) => void) {}
-
-  result(output: unknown): void {
-    if (this.finished) {
-      return;
-    }
-    this.finished = true;
-    this.send({ id: this.id, type: "result", output });
-  }
-
-  chunk(output: string): void {
-    if (this.finished) {
-      return;
-    }
-    this.streamed = true;
-    this.send({ id: this.id, type: "chunk", output });
-  }
-
-  done(): void {
-    if (this.finished) {
-      return;
-    }
-    this.finished = true;
-    this.send({ id: this.id, type: "done" });
-  }
-
-  fail(error: unknown): void {
-    if (this.finished) {
-      return;
-    }
-    this.finished = true;
-    this.send({ id: this.id, type: "error", error: toErrorMessage(error) });
-  }
 }
 
 const pinixManifest = loadPinixManifest();
@@ -217,7 +147,7 @@ class AgentClip extends Clip {
     const first = argv[0];
 
     if (!first || first === "--ipc") {
-      await serveAgentIPC(this);
+      await serveIPC(this);
       return;
     }
 
@@ -233,14 +163,6 @@ class AgentClip extends Clip {
 
     if (first === "event-check") {
       await this.runEventCheck(argv.slice(1));
-      return;
-    }
-
-    if (first === "_run-worker") {
-      const exitCode = await runWorker(argv.slice(1));
-      if (exitCode !== 0) {
-        process.exit(exitCode);
-      }
       return;
     }
 
@@ -262,10 +184,10 @@ class AgentClip extends Clip {
     }
   }
 
-  async executeCommand(commandName: string, input: InvocationInput, responder?: IPCResponder): Promise<unknown> {
+  async executeCommand(commandName: string, input: InvocationInput): Promise<unknown> {
     switch (commandName) {
       case "send":
-        return await this.runSend(input, responder);
+        return await this.runSend(input);
       case "create-topic":
         return await this.runCreateTopic(input);
       case "list-topics":
@@ -339,7 +261,7 @@ class AgentClip extends Clip {
   private async runSendCLI(args: string[], outputFormat: OutputFormat): Promise<number> {
     const out = createOutput(outputFormat);
     const invocation = { args, stdin: readStdinText() } satisfies InvocationInput;
-    return await this.handleSend(invocation, outputFormat, out);
+    return await this.handleSend(invocation, out);
   }
 
   private async runCreateTopicCLI(args: string[], outputFormat: OutputFormat): Promise<number> {
@@ -428,47 +350,32 @@ class AgentClip extends Clip {
         continue;
       }
 
-      await spawnDetachedSelf([
-        "send",
-        "--topic",
-        event.topic_id,
-        "--payload",
-        event.run_message,
-        "--async",
-      ]);
+      const run = createRun(db, event.topic_id, process.pid, true);
+      this.startBackgroundRun({
+        runId: run.id,
+        topicId: event.topic_id,
+        message: event.run_message,
+        attachments: [],
+      });
       activeTopics[event.topic_id] = true;
       triggered += 1;
-      out.info(`triggered ${event.id} for topic ${event.topic_id}`);
+      out.info(`triggered ${event.id} for topic ${event.topic_id} (${run.id})`);
     }
 
     out.result({ due: due.length, triggered, skipped });
   }
 
-  private async runSend(input: InvocationInput, responder?: IPCResponder): Promise<unknown> {
-    const outputFormat = resolveOutputFormat(input);
-
-    if (responder && outputFormat === "jsonl") {
-      const out = createJSONLChunkOutput((chunk) => responder.chunk(chunk));
-      try {
-        await this.handleSend(input, outputFormat, out, responder);
-      } catch (error) {
-        responder.fail(error);
-      }
-      return {};
-    }
-
+  private async runSend(input: InvocationInput): Promise<unknown> {
     const lines: string[] = [];
     const out = createJSONLChunkOutput((chunk) => lines.push(chunk));
-    await this.handleSend(input, outputFormat, out);
+    const exitCode = await this.handleSend(input, out);
+    if (exitCode !== 0) {
+      throw new Error(extractSendError(lines, exitCode));
+    }
     return lines.join("");
   }
 
-  private async handleSend(
-    input: InvocationInput,
-    outputFormat: OutputFormat,
-    out: Output,
-    responder?: IPCResponder,
-  ): Promise<number> {
+  private async handleSend(input: InvocationInput, out: Output): Promise<number> {
     const resolved = resolveSendInput(input);
     if (!resolved.message) {
       throw new Error("message is required (-p or stdin JSON)");
@@ -479,9 +386,6 @@ class AgentClip extends Clip {
     if (resolved.runId) {
       injectMessage(db, resolved.runId, resolved.message);
       out.info(`[inject] sent to run ${resolved.runId}`);
-      if (responder) {
-        responder.done();
-      }
       return 0;
     }
 
@@ -489,89 +393,101 @@ class AgentClip extends Clip {
     setCurrentTopic(topicId);
     ensureTopicDir(topicId);
 
-    if (getActiveRun(db, topicId)) {
-      const activeRun = getActiveRun(db, topicId);
-      if (activeRun) {
-        const elapsed = Math.max(0, nowUnix() - activeRun.started_at);
-        throw new Error(
-          `topic ${topicId} has an active run (${activeRun.id}, running ${elapsed}s)\n` +
-            `  -> inject:  send -p '...' -r ${activeRun.id}\n` +
-            `  -> watch:   get-run ${activeRun.id}\n` +
-            `  -> cancel:  cancel-run ${activeRun.id}`,
-        );
-      }
+    const activeRun = getActiveRun(db, topicId);
+    if (activeRun) {
+      const elapsed = Math.max(0, nowUnix() - activeRun.started_at);
+      throw new Error(
+        `topic ${topicId} has an active run (${activeRun.id}, running ${elapsed}s)\n` +
+          `  -> inject:  send -p '...' -r ${activeRun.id}\n` +
+          `  -> watch:   get-run ${activeRun.id}\n` +
+          `  -> cancel:  cancel-run ${activeRun.id}`,
+      );
     }
 
     if (resolved.isAsync) {
       const run = createRun(db, topicId, process.pid, true);
-      try {
-        const child = spawnWorker(
-          {
-            runId: run.id,
-            topicId,
-            message: resolved.message,
-            attachments: resolved.attachments,
-            outputFormat: "raw",
-            asyncFile: true,
-          },
-          {
-            detached: true,
-            outputFormat: "raw",
-            asyncFile: true,
-            stdio: ["ignore", "ignore", "ignore"],
-          },
-        );
-        updateRunPID(db, run.id, child.pid ?? process.pid);
-        child.unref();
-      } catch (error) {
-        finishRun(db, run.id, "error");
-        throw error;
-      }
+      this.startBackgroundRun({
+        runId: run.id,
+        topicId,
+        message: resolved.message,
+        attachments: resolved.attachments,
+      });
 
       out.info(`[run] ${run.id} started (async)`);
       out.info(`  -> watch:   get-run ${run.id}`);
       out.info(`  -> inject:  send -p '...' -r ${run.id}`);
       out.info(`  -> cancel:  cancel-run ${run.id}`);
-      if (responder) {
-        responder.done();
-      }
       return 0;
     }
 
     const run = createRun(db, topicId, process.pid, false);
-    const child = spawnWorker(
-      {
-        runId: run.id,
-        topicId,
-        message: resolved.message,
-        attachments: resolved.attachments,
-        outputFormat,
-        asyncFile: false,
-      },
-      {
-        detached: false,
-        outputFormat,
-        asyncFile: false,
-        stdio: ["ignore", "pipe", "pipe"],
-      },
-    );
-    updateRunPID(db, run.id, child.pid ?? process.pid);
-
-    if (responder) {
-      const stderr = await streamWorkerToResponder(child, responder);
-      if (!responder.finished) {
-        if (stderr) {
-          responder.fail(stderr);
-        } else {
-          responder.done();
-        }
-      }
-      return stderr ? 1 : 0;
+    try {
+      await this.executeRunLoop(
+        {
+          runId: run.id,
+          topicId,
+          message: resolved.message,
+          attachments: resolved.attachments,
+        },
+        out,
+      );
+      return 0;
+    } catch (error) {
+      return isAbortError(error) ? 130 : 1;
     }
+  }
 
-    pipeWorkerToCurrentProcess(child);
-    const exitCode = await waitForChild(child);
-    return exitCode;
+  private startBackgroundRun(execution: RunExecution): void {
+    const out = createAsyncFileOutput(execution.runId);
+    void this.executeRunLoop(execution, out).catch(() => {});
+  }
+
+  private async executeRunLoop(execution: RunExecution, out: Output): Promise<void> {
+    const db = openDB();
+    const cfg = loadConfig();
+    const controller = new AbortController();
+    registerRunController(execution.runId, controller);
+    const signalHandler = () => controller.abort();
+    process.on("SIGTERM", signalHandler);
+    process.on("SIGINT", signalHandler);
+
+    try {
+      await withCurrentTopic(execution.topicId, async () => {
+        ensureSkillsDir();
+        ensureTopicDir(execution.topicId);
+        setCurrentTopic(execution.topicId);
+
+        const message = execution.attachments.length > 0
+          ? appendAttachments(execution.message, execution.attachments)
+          : execution.message;
+        const ctx = await buildContext(db, cfg, execution.topicId, message);
+        const images = readImageAttachments(execution.attachments);
+        if (images.length > 0 && ctx.messages.length > 0) {
+          ctx.messages[ctx.messages.length - 1] = {
+            ...ctx.messages[ctx.messages.length - 1],
+            images,
+          };
+        }
+
+        const registry = buildRegistry(db, cfg);
+        const newMessages = await runLoop(cfg, ctx, registry, out, {
+          db,
+          runId: execution.runId,
+          signal: controller.signal,
+        });
+        saveMessages(db, execution.topicId, execution.runId, newMessages);
+        await processMemory(db, cfg, execution.topicId, execution.runId, newMessages).catch(() => {});
+      });
+    } catch (error) {
+      const cancelled = controller.signal.aborted || isAbortError(error);
+      finishRun(db, execution.runId, cancelled ? "cancelled" : "error");
+      out.info(`[error] ${toErrorMessage(error)}`);
+      throw error;
+    } finally {
+      unregisterRunController(execution.runId);
+      process.off("SIGTERM", signalHandler);
+      process.off("SIGINT", signalHandler);
+    }
   }
 
   private async runCreateTopic(input: InvocationInput): Promise<unknown> {
@@ -651,7 +567,10 @@ class AgentClip extends Clip {
       throw new Error(`run ${run.id} is not active (status: ${run.status})`);
     }
 
-    if (run.pid > 0) {
+    const controller = getRunController(run.id);
+    if (controller) {
+      controller.abort();
+    } else if (run.pid > 0 && run.pid !== process.pid) {
       try {
         process.kill(run.pid, "SIGTERM");
       } catch {
@@ -759,143 +678,6 @@ class AgentClip extends Clip {
       throw new Error("upload requires stdin JSON payload");
     }
     return uploadFile(JSON.parse(raw) as UploadInput);
-  }
-}
-
-async function serveAgentIPC(clip: AgentClip): Promise<void> {
-  const send = (message: IPCMessage) => {
-    process.stdout.write(JSON.stringify(message) + "\n");
-  };
-
-  setIPCMode(true);
-  setIPCTransport((message) => send(message as IPCMessage));
-
-  send({
-    type: "register",
-    manifest: {
-      name: clip.name,
-      domain: clip.domain,
-      description: clip.description,
-      commands: Array.from(clip.getCommands().keys()).map((name) => ({
-        name,
-        description: clip.getCommandDescription(name),
-      })),
-      dependencies: [...clip.dependencies],
-    },
-  });
-
-  for await (const line of readLines(process.stdin)) {
-    let message: IPCMessage;
-    try {
-      message = JSON.parse(line) as IPCMessage;
-    } catch {
-      process.stderr.write(`[ipc] invalid JSON: ${line}\n`);
-      continue;
-    }
-
-    if (message.type === "registered") {
-      continue;
-    }
-
-    if (
-      message.type === "result" ||
-      message.type === "error" ||
-      message.type === "chunk" ||
-      message.type === "done"
-    ) {
-      if (!handleInvokeResponse(message)) {
-        process.stderr.write(`[ipc] unexpected response: ${line}\n`);
-      }
-      continue;
-    }
-
-    if (message.type !== "invoke") {
-      process.stderr.write(`[ipc] unsupported message type: ${message.type}\n`);
-      continue;
-    }
-
-    if (!message.id || !message.command) {
-      send({ id: message.id, type: "error", error: "invoke requires id and command" });
-      continue;
-    }
-
-    const responder = new IPCResponder(message.id, send);
-    try {
-      const commandDef = clip.getCommands().get(message.command);
-      if (!commandDef) {
-        throw new Error(`unknown command: ${message.command}`);
-      }
-      const parsed = commandDef.input.parse((message.input ?? {}) as InvocationInput);
-      const result = await clip.executeCommand(message.command, parsed, responder);
-      if (!responder.finished) {
-        responder.result(result ?? {});
-      }
-    } catch (error) {
-      responder.fail(error);
-    }
-  }
-}
-
-async function runWorker(args: string[]): Promise<number> {
-  const payloadBase64 = valueAfterFlag(args, "--payload-base64");
-  if (!payloadBase64) {
-    process.stderr.write("missing --payload-base64\n");
-    return 1;
-  }
-
-  let payload: WorkerPayload;
-  try {
-    payload = JSON.parse(Buffer.from(payloadBase64, "base64").toString("utf8")) as WorkerPayload;
-  } catch (error) {
-    process.stderr.write(`parse worker payload: ${toErrorMessage(error)}\n`);
-    return 1;
-  }
-
-  const db = openDB();
-  const cfg = loadConfig();
-  const out = payload.asyncFile ? createAsyncFileOutput(payload.runId) : createOutput(payload.outputFormat);
-  const controller = new AbortController();
-  registerRunController(payload.runId, controller);
-  const signalHandler = () => controller.abort();
-  process.on("SIGTERM", signalHandler);
-  process.on("SIGINT", signalHandler);
-
-  try {
-    ensureSkillsDir();
-    ensureTopicDir(payload.topicId);
-    setCurrentTopic(payload.topicId);
-    updateRunPID(db, payload.runId, process.pid);
-
-    const message = payload.attachments.length > 0
-      ? appendAttachments(payload.message, payload.attachments)
-      : payload.message;
-    const ctx = await buildContext(db, cfg, payload.topicId, message);
-    const images = readImageAttachments(payload.attachments);
-    if (images.length > 0 && ctx.messages.length > 0) {
-      ctx.messages[ctx.messages.length - 1] = {
-        ...ctx.messages[ctx.messages.length - 1],
-        images,
-      };
-    }
-
-    const registry = buildRegistry(db, cfg);
-    const newMessages = await runLoop(cfg, ctx, registry, out, {
-      db,
-      runId: payload.runId,
-      signal: controller.signal,
-    });
-    saveMessages(db, payload.topicId, payload.runId, newMessages);
-    await processMemory(db, cfg, payload.topicId, payload.runId, newMessages).catch(() => {});
-    return 0;
-  } catch (error) {
-    const cancelled = controller.signal.aborted || isAbortError(error);
-    finishRun(db, payload.runId, cancelled ? "cancelled" : "error");
-    out.info(`[error] ${toErrorMessage(error)}`);
-    return cancelled ? 130 : 1;
-  } finally {
-    unregisterRunController(payload.runId);
-    process.off("SIGTERM", signalHandler);
-    process.off("SIGINT", signalHandler);
   }
 }
 
@@ -1023,18 +805,6 @@ function resolveCreateTopicName(input: InvocationInput): string {
   return parsed?.name ?? "";
 }
 
-function resolveOutputFormat(input: InvocationInput): OutputFormat {
-  const args = readArgs(input);
-  for (let index = 0; index < args.length; index += 1) {
-    if (args[index] === "--output") {
-      return args[index + 1] === "jsonl" ? "jsonl" : "raw";
-    }
-  }
-
-  const value = readStringField(input, ["output"]);
-  return value === "jsonl" ? "jsonl" : "raw";
-}
-
 function resolveIntegerOption(
   input: InvocationInput,
   flags: string[],
@@ -1127,91 +897,19 @@ function readBooleanField(input: InvocationInput, fields: string[]): boolean | u
   return undefined;
 }
 
-function valueAfterFlag(args: string[], flag: string): string {
-  const index = args.indexOf(flag);
-  if (index < 0) {
-    return "";
-  }
-  return args[index + 1] ?? "";
-}
-
-function spawnWorker(payload: WorkerPayload, options: WorkerSpawnOptions): ChildProcess {
-  const payloadBase64 = Buffer.from(JSON.stringify(payload), "utf8").toString("base64");
-  const entrypoint = rootPath("index.ts");
-  return spawn(
-    process.execPath,
-    ["run", entrypoint, "_run-worker", "--payload-base64", payloadBase64],
-    {
-      cwd: projectRoot,
-      detached: options.detached,
-      stdio: options.stdio,
-      env: process.env,
-    },
-  );
-}
-
-function pipeWorkerToCurrentProcess(child: ChildProcess): void {
-  child.stdout?.pipe(process.stdout);
-  child.stderr?.pipe(process.stderr);
-}
-
-async function streamWorkerToResponder(child: ChildProcess, responder: IPCResponder): Promise<string> {
-  let stderr = "";
-  child.stdout?.on("data", (chunk: Buffer | string) => {
-    responder.chunk(chunk.toString());
-  });
-  child.stderr?.on("data", (chunk: Buffer | string) => {
-    stderr += chunk.toString();
-  });
-
-  const exitCode = await waitForChild(child);
-  return exitCode === 0 ? "" : stderr || `send exited with code ${exitCode}`;
-}
-
-function waitForChild(child: ChildProcess): Promise<number> {
-  return new Promise((resolve, reject) => {
-    child.once("error", reject);
-    child.once("exit", (code, signal) => {
-      if (signal) {
-        resolve(1);
-        return;
+function extractSendError(chunks: string[], exitCode: number): string {
+  for (let index = chunks.length - 1; index >= 0; index -= 1) {
+    try {
+      const entry = JSON.parse(chunks[index]) as { type?: string; message?: string };
+      if (entry.type === "info" && typeof entry.message === "string" && entry.message.startsWith("[error] ")) {
+        return entry.message.slice("[error] ".length);
       }
-      resolve(code ?? 0);
-    });
-  });
-}
-
-async function spawnDetachedSelf(args: string[]): Promise<void> {
-  const entrypoint = rootPath("index.ts");
-  const child = spawn(process.execPath, ["run", entrypoint, ...args], {
-    cwd: projectRoot,
-    detached: true,
-    stdio: ["ignore", "ignore", "ignore"],
-    env: process.env,
-  });
-
-  await new Promise<void>((resolve, reject) => {
-    child.once("error", reject);
-    child.once("spawn", () => resolve());
-  });
-  child.unref();
-}
-
-async function* readLines(stream: NodeJS.ReadableStream): AsyncGenerator<string> {
-  let buffer = "";
-  for await (const chunk of stream) {
-    buffer += chunk.toString();
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
-    for (const line of lines) {
-      if (line.trim()) {
-        yield line;
-      }
+    } catch {
+      // ignore malformed output fragments
     }
   }
-  if (buffer.trim()) {
-    yield buffer;
-  }
+
+  return `send exited with code ${exitCode}`;
 }
 
 function isAbortError(error: unknown): boolean {

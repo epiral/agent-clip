@@ -1,18 +1,24 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { dataRoot, ensureDir, topicDir } from "./paths";
 import { isImageFile } from "./media";
 
-let currentTopicID = "";
+const topicContext = new AsyncLocalStorage<string>();
+let fallbackTopicID = "";
 
 export const pinixDataURLPrefix = "pinix-data://local/data/";
 
 export function setCurrentTopic(topicId: string): void {
-  currentTopicID = topicId;
+  fallbackTopicID = topicId.trim();
+}
+
+export function withCurrentTopic<T>(topicId: string, fn: () => T): T {
+  return topicContext.run(topicId.trim(), fn);
 }
 
 export function getCurrentTopic(): string {
-  return currentTopicID;
+  return topicContext.getStore() ?? fallbackTopicID;
 }
 
 export function ensureTopicDir(topicId: string): void {
@@ -29,6 +35,7 @@ export function resolvePath(inputPath: string): string {
     return abs;
   }
 
+  const currentTopicID = getCurrentTopic();
   if (!currentTopicID) {
     throw new Error(`no topic context set (relative path ${JSON.stringify(inputPath)} requires a topic)`);
   }
@@ -45,6 +52,7 @@ export function resolvePathToRelative(path: string): string {
   if (path.startsWith("/")) {
     return join("topics", path.slice(1));
   }
+  const currentTopicID = getCurrentTopic();
   if (currentTopicID) {
     return join("topics", currentTopicID, path);
   }
