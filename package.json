@@ -9,7 +9,7 @@
     "typecheck": "/Users/cp/.bun/bin/tsc --noEmit"
   },
   "dependencies": {
-    "@pinixai/core": "^0.4.0",
+    "@pinixai/core": "git+https://github.com/epiral/pinixai-core.git#0c611670ba2c716499cc26a8ab58360a0ff0dbe2",
     "yaml": "^2.8.1"
   },
   "devDependencies": {
