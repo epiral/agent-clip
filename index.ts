@@ -12,7 +12,7 @@ interface PinixFileManifest {
   domain?: string;
   description?: string;
   commands?: Array<{ name?: string; description?: string }>;
-  dependencies?: Record<string, string>;
+  dependencies?: Record<string, { package: string; version: string }>;
 }
 
 const AnyOutputSchema = z.any();
@@ -25,7 +25,7 @@ type CommandDecorator = (describe?: string) => <This extends object, Value>(
 const clipCommand = command as unknown as CommandDecorator;
 
 const pinixManifest = loadPinixManifest();
-const dependencyNames = Object.keys(pinixManifest.dependencies ?? {});
+const manifestDependencies = pinixManifest.dependencies ?? {};
 
 class AgentClip extends Clip {
   private readonly runtime = new AgentClipCommands();
@@ -34,7 +34,7 @@ class AgentClip extends Clip {
   domain = pinixManifest.domain ?? "ai";
   patterns = ["send -> tool use -> memory"];
   description = pinixManifest.description ?? "AI Agent — agentic loop with memory, tools, and vision";
-  dependencies = dependencyNames;
+  dependencies = manifestDependencies;
 
   @clipCommand("发送消息并执行 agentic loop")
   send = handler(InvocationSchema, AnyOutputSchema, async (input, stream) => await this.runtime.runSend(input, stream));
