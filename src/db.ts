@@ -1,9 +1,27 @@
-import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { Database } from "bun:sqlite";
+import * as sqliteVec from "sqlite-vec";
 import { dbPath, ensureDataLayout, ensureTopicDir, runDir, runOutputPath, schemaPath, topicDir } from "./paths";
 import type { Message, ToolCall } from "./llm";
 import { extractThinking } from "./sanitize";
 import { isProcessAlive, nowUnix, randomID } from "./shared";
+
+let vecLoaded = false;
+
+function findBrewSqlite(): string | null {
+  const path = "/opt/homebrew/opt/sqlite/lib/libsqlite3.dylib";
+  if (statSync(path, { throwIfNoEntry: false })) return path;
+  return null;
+}
+
+function loadVec(db: Database): boolean {
+  try {
+    sqliteVec.load(db);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 let dbInstance: Database | null = null;
 
@@ -23,12 +41,24 @@ function transaction<T>(db: Database, fn: () => T): T {
   }
 }
 
+export function hasVec(): boolean {
+  return vecLoaded;
+}
+
 export function openDB(): Database {
   if (dbInstance) {
     return dbInstance;
   }
 
   ensureDataLayout();
+
+  if (process.platform === "darwin") {
+    const brewSqlite = findBrewSqlite();
+    if (brewSqlite) {
+      Database.setCustomSQLite(brewSqlite);
+    }
+  }
+
   const db = new Database(dbPath(), { create: true });
   db.exec("PRAGMA journal_mode = WAL");
   db.exec(readFileSync(schemaPath(), "utf8"));
@@ -54,6 +84,13 @@ export function openDB(): Database {
   }
 
   migrateThinkTags(db);
+
+  vecLoaded = loadVec(db);
+  if (vecLoaded) {
+    db.exec("CREATE VIRTUAL TABLE IF NOT EXISTS summaries_vec USING vec0(embedding float[1536])");
+    migrateEmbeddingsToVec(db);
+  }
+
   dbInstance = db;
   return db;
 }
@@ -73,6 +110,24 @@ function migrateThinkTags(db: Database): void {
     if (content !== (row.content ?? "")) {
       update.run(content, reasoning || null, row.rowid);
     }
+  }
+}
+
+function migrateEmbeddingsToVec(db: Database): void {
+  const total = db.query<{ c: number }, []>(
+    "SELECT COUNT(*) as c FROM summaries WHERE embedding IS NOT NULL",
+  ).get();
+  const indexed = db.query<{ c: number }, []>(
+    "SELECT COUNT(*) as c FROM summaries_vec",
+  ).get();
+  if ((total?.c ?? 0) <= (indexed?.c ?? 0)) return;
+
+  const rows = db.query<{ id: number; embedding: Buffer }, []>(
+    "SELECT id, embedding FROM summaries WHERE embedding IS NOT NULL",
+  ).all();
+  const stmt = db.query("INSERT OR IGNORE INTO summaries_vec(rowid, embedding) VALUES (?, ?)");
+  for (const row of rows) {
+    stmt.run(row.id, new Uint8Array(row.embedding));
   }
 }
 

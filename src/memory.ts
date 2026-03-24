@@ -1,6 +1,7 @@
 import { Database } from "bun:sqlite";
 import type { Config } from "./config";
 import { getEmbeddingProvider } from "./config";
+import { hasVec } from "./db";
 import { callLLM, textMessage, type Message } from "./llm";
 import { nowUnix, truncateRunes } from "./shared";
 
@@ -109,10 +110,15 @@ export function storeSummary(
   embeddingModel: string,
 ): void {
   const blob = embedding.length > 0 ? Buffer.from(encodeEmbedding(embedding)) : null;
-  db.query(
+  const result = db.query(
     `INSERT INTO summaries (topic_id, run_id, summary, user_message, embedding, embedding_model, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
   ).run(topicId, runId, summary, userMessage, blob, embeddingModel || null, nowUnix());
+
+  if (embedding.length > 0 && hasVec()) {
+    const vecBlob = new Uint8Array(new Float32Array(embedding).buffer);
+    db.query("INSERT INTO summaries_vec(rowid, embedding) VALUES (?, ?)").run(result.lastInsertRowid, vecBlob);
+  }
 }
 
 export function getRecentSummaries(db: Database, limit: number): string[] {
@@ -161,6 +167,57 @@ export function searchMemorySemantic(db: Database, queryEmbedding: number[], lim
 }
 
 function searchSemantic(db: Database, queryEmbedding: number[], filter: SearchFilter, limit: number): Summary[] {
+  if (hasVec()) {
+    return searchSemanticVec(db, queryEmbedding, filter, limit);
+  }
+  return searchSemanticJS(db, queryEmbedding, filter, limit);
+}
+
+function searchSemanticVec(db: Database, queryEmbedding: number[], filter: SearchFilter, limit: number): Summary[] {
+  const queryBlob = new Uint8Array(new Float32Array(queryEmbedding).buffer);
+  const candidates = db.query<{ rowid: number; distance: number }, [Uint8Array, number]>(
+    "SELECT rowid, distance FROM summaries_vec WHERE embedding MATCH ? ORDER BY distance LIMIT ?",
+  ).all(queryBlob, limit * 3);
+
+  if (candidates.length === 0) return [];
+
+  const distanceMap = new Map(candidates.map((c) => [c.rowid, c.distance]));
+  const rowids = candidates.map((c) => c.rowid);
+  const placeholders = rowids.map(() => "?").join(",");
+
+  let sql = `SELECT id, topic_id, COALESCE(run_id, '') AS run_id, summary, user_message, created_at
+    FROM summaries WHERE id IN (${placeholders})`;
+  const params: (string | number)[] = rowids.map((id) => id as number);
+
+  if (filter.topicId) {
+    sql += " AND topic_id = ?";
+    params.push(filter.topicId);
+  }
+
+  const rows = db.query<{
+    id: number;
+    topic_id: string;
+    run_id: string | null;
+    summary: string;
+    user_message: string;
+    created_at: number;
+  }, (string | number)[]>(sql).all(...params);
+
+  return rows
+    .map((row) => ({
+      id: row.id,
+      topic_id: row.topic_id,
+      run_id: row.run_id ?? undefined,
+      summary: row.summary,
+      user_message: row.user_message,
+      created_at: row.created_at,
+      similarity: 1 / (1 + (distanceMap.get(row.id) ?? 999)),
+    } satisfies Summary))
+    .sort((left, right) => (right.similarity ?? 0) - (left.similarity ?? 0))
+    .slice(0, limit);
+}
+
+function searchSemanticJS(db: Database, queryEmbedding: number[], filter: SearchFilter, limit: number): Summary[] {
   const rows = (filter.topicId
     ? db.query<{
       id: number;

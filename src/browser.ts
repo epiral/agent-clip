@@ -331,13 +331,13 @@ function buildSnapshotScript(interactiveOnly: boolean): string {
       if (!isVisible(node)) continue;
       node.setAttribute('data-pinix-ref', String(index));
       const tag = node.tagName.toLowerCase();
-      const text = (node.innerText || node.textContent || '').replace(/\s+/g, ' ').trim();
+      const text = (node.innerText || node.textContent || '').replace(/\\s+/g, ' ').trim();
       const href = node instanceof HTMLAnchorElement ? node.href : '';
       const placeholder = 'placeholder' in node && typeof node.placeholder === 'string' ? node.placeholder : '';
       const label = [text, placeholder, href].filter(Boolean).join(' | ');
       lines.push('@' + index + ' <' + tag + '> ' + (label || '(empty)'));
       index += 1;
     }
-    return lines.join('\n');
+    return lines.join('\\n');
   })()`;
 }

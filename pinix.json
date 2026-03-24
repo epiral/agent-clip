@@ -50,9 +50,6 @@
     }
   ],
   "dependencies": {
-    "browser": {
-      "package": "bb-browser",
-      "version": "^1.0.0"
-    }
+    "browser": { "package": "bb-browser", "version": "^1.0.0" }
   }
 }
