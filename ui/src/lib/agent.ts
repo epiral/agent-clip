@@ -167,13 +167,6 @@ export interface ProviderInfo {
   api_key: string; // masked
 }
 
-export interface ClipInfo {
-  name: string;
-  url: string;
-  token: string; // masked
-  commands: string[];
-}
-
 export interface AgentConfig {
   name: string;
   providers: Record<string, ProviderInfo>;
@@ -182,8 +175,7 @@ export interface AgentConfig {
   embedding_provider: string;
   embedding_model: string;
   system_prompt: string;
-  clips: ClipInfo[];
-  browser?: { endpoint: string };
+  clips: string[];
 }
 
 export async function getConfig(): Promise<AgentConfig> {
@@ -198,8 +190,8 @@ export async function deleteConfig(key: string): Promise<void> {
   await invoke("config", { args: ["delete", key] });
 }
 
-export async function addClip(clip: { name: string; url: string; token: string; commands?: string[] }): Promise<void> {
-  await invoke("config", { args: ["add-clip", JSON.stringify(clip)] });
+export async function addClip(name: string): Promise<void> {
+  await invoke("config", { args: ["add-clip", name] });
 }
 
 export async function removeClip(name: string): Promise<void> {
