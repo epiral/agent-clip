@@ -3,9 +3,7 @@ import { Database } from 'bun:sqlite';
 import { parseChain, Operator } from './chain';
 import {
   type Config,
-  configAddClip,
   configDelete,
-  configRemoveClip,
   configSet,
   configToText,
   loadConfig,
@@ -301,7 +299,7 @@ export function buildRegistry(db: Database, cfg: Config): Registry {
   registerEventCommands(registry.register.bind(registry), db);
   registerSkillCommands(registry.register.bind(registry));
   registerConfigCommands(registry.register.bind(registry));
-  registerClipCommands(registry.register.bind(registry), cfg);
+  registerClipCommands(registry.register.bind(registry));
   return registry;
 }
 
@@ -627,8 +625,6 @@ function registerConfigCommands(register: RegisterFn): void {
       '  config                                    — show current config',
       '  config set <key> <value>                  — set a value (supports dot-path: providers.openrouter.api_key)',
       '  config delete <key>                       — delete a key (e.g., providers.minimax)',
-      '  config add-clip <name>                    — add a clip by name',
-      '  config remove-clip <name>                 — remove a clip',
     ].join('\n'),
     async (args, stdin) => {
       if (args.length === 0) {
@@ -652,21 +648,6 @@ function registerConfigCommands(register: RegisterFn): void {
           configDelete(args[1]);
           return `deleted ${args[1]}`;
         }
-        case 'add-clip': {
-          const clipName = args[1];
-          if (!clipName) {
-            throw new Error('usage: config add-clip <name>');
-          }
-          configAddClip(clipName);
-          return `added clip ${clipName}`;
-        }
-        case 'remove-clip': {
-          if (!args[1]) {
-            throw new Error('usage: config remove-clip <name>');
-          }
-          configRemoveClip(args[1]);
-          return `removed clip ${args[1]}`;
-        }
         default:
           throw new Error(`unknown config subcommand: ${args[0]}`);
       }
@@ -674,28 +655,22 @@ function registerConfigCommands(register: RegisterFn): void {
   );
 }
 
-function registerClipCommands(register: RegisterFn, cfg: Config): void {
-  const clipNames = new Set(cfg.clips.map((c) => c.name));
-
+function registerClipCommands(register: RegisterFn): void {
   register(
     'clip',
     [
       'Operate external clips (services, tools, environments).',
-      '  clip list                              — list configured clips (with commands from Hub)',
+      '  clip list                              — list all clips from Hub',
       '  clip <name> <command> [args...]        — invoke a command',
       '  clip <name> pull <remote-path> [name]  — pull file from clip to local',
       '  clip <name> push <local-path> <remote> — push local file to clip',
     ].join('\n'),
     async (args, stdin) => {
       if (args.length === 0 || (args.length === 1 && args[0] === 'list')) {
-        return clipList(clipNames);
+        return clipList();
       }
 
       const name = args[0];
-      if (!clipNames.has(name)) {
-        throw new Error(`clip ${JSON.stringify(name)} not configured. Use 'clip list' to see available clips`);
-      }
-
       const command = args[1];
       if (!command) {
         return clipInfo(name);
@@ -796,27 +771,22 @@ async function clipPush(clipName: string, args: string[]): Promise<string> {
   return `Pushed ${args[0]} -> ${clipName}:${args[1]} (${humanSize(bytes.byteLength)})`;
 }
 
-async function clipList(configured: Set<string>): Promise<string> {
-  if (configured.size === 0) {
-    return 'No clips configured. Use `config add-clip <name>` to add one.';
-  }
-
+async function clipList(): Promise<string> {
   let hubClips: Awaited<ReturnType<typeof hubListClips>> = [];
   try {
     hubClips = await hubListClips();
-  } catch {
-    return [...configured].map((name) => `  ${name}`).join('\n');
+  } catch (err) {
+    return `[error] cannot reach Hub: ${toErrorMessage(err)}`;
+  }
+
+  if (hubClips.length === 0) {
+    return 'No clips on Hub.';
   }
 
   const lines: string[] = [];
-  for (const name of configured) {
-    const info = hubClips.find((c) => c.name === name);
-    if (info) {
-      const cmds = info.commands.map((c) => c.name).join(', ');
-      lines.push(`  ${name}${cmds ? ` — ${cmds}` : ''}`);
-    } else {
-      lines.push(`  ${name} (not found on Hub)`);
-    }
+  for (const clip of hubClips) {
+    const cmds = clip.commands.map((c: { name: string }) => c.name).join(', ');
+    lines.push(`  ${clip.name}${cmds ? ` — ${cmds}` : ''}`);
   }
   return lines.join('\n');
 }

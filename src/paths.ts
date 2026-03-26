@@ -10,7 +10,8 @@ export function rootPath(...parts: string[]): string {
 }
 
 export function dataRoot(...parts: string[]): string {
-  return rootPath("data", ...parts);
+  const base = process.env.PINIX_DATA_DIR ?? rootPath("data");
+  return join(base, ...parts);
 }
 
 export function seedRoot(...parts: string[]): string {

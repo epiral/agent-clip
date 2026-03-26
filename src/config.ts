@@ -9,19 +9,15 @@ export interface ProviderConfig {
   api_key: string;
 }
 
-export interface ClipConfig {
-  name: string;
-}
-
 export interface Config {
   name: string;
+  hub_url: string;
   providers: Record<string, ProviderConfig>;
   llm_provider: string;
   llm_model: string;
   embedding_provider: string;
   embedding_model: string;
   system_prompt: string;
-  clips: ClipConfig[];
 }
 
 export interface ProviderJSON {
@@ -32,13 +28,13 @@ export interface ProviderJSON {
 
 export interface ConfigJSON {
   name: string;
+  hub_url: string;
   providers: Record<string, ProviderJSON>;
   llm_provider: string;
   llm_model: string;
   embedding_provider: string;
   embedding_model: string;
   system_prompt: string;
-  clips: string[];
 }
 
 export function ensureConfigExists(): void {
@@ -61,14 +57,18 @@ export function loadConfig(): Config {
   const parsed = parseDocument(raw).toJS() as Record<string, unknown> | null;
   const cfg: Config = {
     name: asString(parsed?.name),
+    hub_url: asString(parsed?.hub_url),
     providers: normalizeProviders(parsed?.providers),
     llm_provider: asString(parsed?.llm_provider),
     llm_model: asString(parsed?.llm_model),
     embedding_provider: asString(parsed?.embedding_provider),
     embedding_model: asString(parsed?.embedding_model),
     system_prompt: asString(parsed?.system_prompt),
-    clips: normalizeClips(parsed?.clips),
   };
+
+  if (cfg.hub_url) {
+    process.env.PINIX_URL = cfg.hub_url;
+  }
 
   const openrouterKey = process.env.OPENROUTER_API_KEY;
   if (openrouterKey && cfg.providers.openrouter) {
@@ -100,13 +100,10 @@ export function getEmbeddingProvider(cfg: Config): ProviderConfig | null {
   return getProvider(cfg, cfg.embedding_provider);
 }
 
-export function getClipConfig(cfg: Config, name: string): ClipConfig | null {
-  return cfg.clips.find((clip) => clip.name === name) ?? null;
-}
-
 export function configToJSON(cfg: Config): ConfigJSON {
   return {
     name: cfg.name,
+    hub_url: cfg.hub_url,
     providers: Object.fromEntries(
       Object.entries(cfg.providers).map(([name, provider]) => [name, {
         protocol: provider.protocol,
@@ -119,23 +116,19 @@ export function configToJSON(cfg: Config): ConfigJSON {
     embedding_provider: cfg.embedding_provider,
     embedding_model: cfg.embedding_model,
     system_prompt: cfg.system_prompt,
-    clips: cfg.clips.map((clip) => clip.name),
   };
 }
 
 export function configToText(cfg: Config): string {
   const lines = [
     `name: ${cfg.name}`,
+    `hub_url: ${cfg.hub_url || "(not set)"}`,
     `llm_provider: ${cfg.llm_provider}`,
     `llm_model: ${cfg.llm_model}`,
     `embedding_provider: ${cfg.embedding_provider}`,
     `embedding_model: ${cfg.embedding_model}`,
     `providers: ${Object.keys(cfg.providers).join(", ")}`,
   ];
-
-  if (cfg.clips.length > 0) {
-    lines.push(`clips: ${cfg.clips.map((c) => c.name).join(", ")}`);
-  }
 
   return lines.join("\n");
 }
@@ -158,28 +151,6 @@ export function configDelete(dotPath: string): void {
   saveDocument(doc);
 }
 
-export function configAddClip(name: string): void {
-  name = name.trim();
-  if (!name) {
-    throw new Error("clip name is required");
-  }
-  const cfg = loadConfig();
-  if (cfg.clips.some((item) => item.name === name)) {
-    throw new Error(`clip ${JSON.stringify(name)} already exists`);
-  }
-  cfg.clips.push({ name });
-  saveConfig(cfg);
-}
-
-export function configRemoveClip(name: string): void {
-  const cfg = loadConfig();
-  const next = cfg.clips.filter((clip) => clip.name !== name);
-  if (next.length === cfg.clips.length) {
-    throw new Error(`clip ${JSON.stringify(name)} not found`);
-  }
-  cfg.clips = next;
-  saveConfig(cfg);
-}
 
 function normalizeProviders(value: unknown): Record<string, ProviderConfig> {
   if (!value || typeof value !== "object") {
@@ -199,22 +170,6 @@ function normalizeProviders(value: unknown): Record<string, ProviderConfig> {
     };
   }
   return providers;
-}
-
-function normalizeClips(value: unknown): ClipConfig[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value
-    .map((item) => {
-      if (typeof item === "string") return { name: item };
-      if (item && typeof item === "object" && typeof (item as Record<string, unknown>).name === "string") {
-        return { name: (item as Record<string, unknown>).name as string };
-      }
-      return null;
-    })
-    .filter((item): item is ClipConfig => item !== null && item.name !== "");
 }
 
 
@@ -303,13 +258,13 @@ function saveConfig(cfg: Config): void {
   const doc = parseDocument("");
   const serialized: Record<string, unknown> = {
     name: cfg.name,
+    hub_url: cfg.hub_url,
     providers: cfg.providers,
     llm_provider: cfg.llm_provider,
     llm_model: cfg.llm_model,
     embedding_provider: cfg.embedding_provider,
     embedding_model: cfg.embedding_model,
     system_prompt: cfg.system_prompt,
-    clips: cfg.clips.map((clip) => clip.name),
   };
 
   doc.contents = doc.createNode(serialized) as typeof doc.contents;

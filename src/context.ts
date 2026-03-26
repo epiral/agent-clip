@@ -12,20 +12,18 @@ interface DiscoveredClip {
   commands: string[];
 }
 
-async function discoverClips(names: string[]): Promise<DiscoveredClip[]> {
-  if (names.length === 0) return [];
+async function discoverClips(selfName: string): Promise<DiscoveredClip[]> {
   try {
     const all = await hubListClips();
-    const nameSet = new Set(names);
     return all
-      .filter((c) => nameSet.has(c.name))
+      .filter((c) => c.name !== selfName)
       .map((c) => ({
         name: c.name,
         description: c.commands.map((cmd) => cmd.description).filter(Boolean).join("; ") || "",
         commands: c.commands.map((cmd) => cmd.name),
       }));
   } catch {
-    return names.map((name) => ({ name, description: "", commands: [] }));
+    return [];
   }
 }
 
@@ -162,17 +160,15 @@ async function buildRecall(db: Database, cfg: Config, userMessage: string): Prom
 async function buildEnvironment(cfg: Config): Promise<string> {
   const lines = [`<time>${new Date().toString()}</time>`];
 
-  if (cfg.clips.length > 0) {
-    const clipInfos = await discoverClips(cfg.clips.map((c) => c.name));
-    if (clipInfos.length > 0) {
-      lines.push("<clips>");
-      for (const info of clipInfos) {
-        const cmds = info.commands.length > 0 ? ` commands="${info.commands.join(", ")}"` : "";
-        const desc = info.description ? `>${info.description}</clip>` : " />";
-        lines.push(`  <clip name=${JSON.stringify(info.name)}${cmds}${desc}`);
-      }
-      lines.push("</clips>");
+  const clipInfos = await discoverClips(cfg.name);
+  if (clipInfos.length > 0) {
+    lines.push("<clips>");
+    for (const info of clipInfos) {
+      const cmds = info.commands.length > 0 ? ` commands="${info.commands.join(", ")}"` : "";
+      const desc = info.description ? `>${info.description}</clip>` : " />";
+      lines.push(`  <clip name=${JSON.stringify(info.name)}${cmds}${desc}`);
     }
+    lines.push("</clips>");
   }
 
   const skills = await listSkills().catch(() => []);

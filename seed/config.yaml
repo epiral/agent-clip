@@ -1,4 +1,5 @@
 name: pi
+hub_url: ""
 
 providers:
   openrouter:
@@ -23,6 +24,3 @@ system_prompt: |
   ## 风格
 
   简洁直接，中文回复。
-
-clips:
-  - twitter

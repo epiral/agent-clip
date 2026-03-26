@@ -1,9 +1,7 @@
 import type { Stream } from "@pinixai/core";
 import { buildContext } from "./context";
 import {
-  configAddClip,
   configDelete,
-  configRemoveClip,
   configSet,
   configToJSON,
   loadConfig,
@@ -511,22 +509,6 @@ export class AgentClipCommands {
         const key = args[1] ?? "";
         configDelete(key);
         return key ? `deleted ${key}` : "config reset";
-      }
-      case "add-clip": {
-        const clipName = args[1];
-        if (!clipName) {
-          throw new Error("usage: config add-clip <name>");
-        }
-        configAddClip(clipName);
-        return `added clip ${clipName}`;
-      }
-      case "remove-clip": {
-        const clipName = args[1];
-        if (!clipName) {
-          throw new Error("usage: config remove-clip <name>");
-        }
-        configRemoveClip(clipName);
-        return `removed clip ${clipName}`;
       }
       default:
         throw new Error(`unknown subcommand: ${args[0]}`);
