@@ -9,14 +9,22 @@ export interface ProviderConfig {
   api_key: string;
 }
 
+export interface HubConfig {
+  url: string;
+  name: string;
+}
+
+export interface InstalledClip {
+  hub: string; // hub name
+}
+
 export interface Config {
   name: string;
-  hub_url: string;
+  hubs: HubConfig[];
+  installed: Record<string, InstalledClip>; // alias → hub mapping
   providers: Record<string, ProviderConfig>;
   llm_provider: string;
   llm_model: string;
-  embedding_provider: string;
-  embedding_model: string;
   system_prompt: string;
 }
 
@@ -28,12 +36,11 @@ export interface ProviderJSON {
 
 export interface ConfigJSON {
   name: string;
-  hub_url: string;
+  hubs: HubConfig[];
+  installed: Record<string, InstalledClip>;
   providers: Record<string, ProviderJSON>;
   llm_provider: string;
   llm_model: string;
-  embedding_provider: string;
-  embedding_model: string;
   system_prompt: string;
 }
 
@@ -57,17 +64,17 @@ export function loadConfig(): Config {
   const parsed = parseDocument(raw).toJS() as Record<string, unknown> | null;
   const cfg: Config = {
     name: asString(parsed?.name),
-    hub_url: asString(parsed?.hub_url),
+    hubs: normalizeHubs(parsed?.hubs),
+    installed: normalizeInstalled(parsed?.installed),
     providers: normalizeProviders(parsed?.providers),
     llm_provider: asString(parsed?.llm_provider),
     llm_model: asString(parsed?.llm_model),
-    embedding_provider: asString(parsed?.embedding_provider),
-    embedding_model: asString(parsed?.embedding_model),
     system_prompt: asString(parsed?.system_prompt),
   };
 
-  if (cfg.hub_url) {
-    process.env.PINIX_URL = cfg.hub_url;
+  // Set PINIX_URL for the first hub (backward compat for @pinixai/core invoke())
+  if (cfg.hubs.length > 0 && cfg.hubs[0].url) {
+    process.env.PINIX_URL = cfg.hubs[0].url;
   }
 
   const openrouterKey = process.env.OPENROUTER_API_KEY;
@@ -93,17 +100,16 @@ export function getLLMProvider(cfg: Config): ProviderConfig {
   return getProvider(cfg, cfg.llm_provider);
 }
 
-export function getEmbeddingProvider(cfg: Config): ProviderConfig | null {
-  if (!cfg.embedding_provider) {
-    return null;
-  }
-  return getProvider(cfg, cfg.embedding_provider);
+export function getHubUrl(cfg: Config, hubName: string): string | undefined {
+  const hub = cfg.hubs.find((h) => h.name === hubName);
+  return hub?.url;
 }
 
 export function configToJSON(cfg: Config): ConfigJSON {
   return {
     name: cfg.name,
-    hub_url: cfg.hub_url,
+    hubs: cfg.hubs,
+    installed: cfg.installed,
     providers: Object.fromEntries(
       Object.entries(cfg.providers).map(([name, provider]) => [name, {
         protocol: provider.protocol,
@@ -113,8 +119,6 @@ export function configToJSON(cfg: Config): ConfigJSON {
     ),
     llm_provider: cfg.llm_provider,
     llm_model: cfg.llm_model,
-    embedding_provider: cfg.embedding_provider,
-    embedding_model: cfg.embedding_model,
     system_prompt: cfg.system_prompt,
   };
 }
@@ -122,11 +126,10 @@ export function configToJSON(cfg: Config): ConfigJSON {
 export function configToText(cfg: Config): string {
   const lines = [
     `name: ${cfg.name}`,
-    `hub_url: ${cfg.hub_url || "(not set)"}`,
+    `hubs: ${cfg.hubs.map((h) => `${h.name}(${h.url})`).join(", ") || "(none)"}`,
+    `installed: ${Object.keys(cfg.installed).join(", ") || "(none)"}`,
     `llm_provider: ${cfg.llm_provider}`,
     `llm_model: ${cfg.llm_model}`,
-    `embedding_provider: ${cfg.embedding_provider}`,
-    `embedding_model: ${cfg.embedding_model}`,
     `providers: ${Object.keys(cfg.providers).join(", ")}`,
   ];
 
@@ -151,6 +154,61 @@ export function configDelete(dotPath: string): void {
   saveDocument(doc);
 }
 
+export function addInstalledClip(alias: string, hubName: string): void {
+  ensureConfigExists();
+  const doc = parseDocument(readFileSync(configPath(), "utf8"));
+  doc.setIn(["installed", alias], doc.createNode({ hub: hubName }));
+  saveDocument(doc);
+}
+
+export function removeInstalledClip(alias: string): void {
+  ensureConfigExists();
+  const doc = parseDocument(readFileSync(configPath(), "utf8"));
+  const root = ensureRootMap(doc);
+
+  const installed = root.get("installed", true);
+  if (!(installed instanceof YAMLMap)) {
+    throw new Error(`clip ${JSON.stringify(alias)} is not installed`);
+  }
+
+  if (!installed.delete(alias)) {
+    throw new Error(`clip ${JSON.stringify(alias)} is not installed`);
+  }
+  saveDocument(doc);
+}
+
+
+function normalizeHubs(value: unknown): HubConfig[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((item): item is Record<string, unknown> => item && typeof item === "object")
+    .map((item) => ({
+      url: asString(item.url),
+      name: asString(item.name),
+    }))
+    .filter((hub) => hub.url && hub.name);
+}
+
+function normalizeInstalled(value: unknown): Record<string, InstalledClip> {
+  if (!value || typeof value !== "object") {
+    return {};
+  }
+
+  const installed: Record<string, InstalledClip> = {};
+  for (const [alias, raw] of Object.entries(value as Record<string, unknown>)) {
+    if (!raw || typeof raw !== "object") {
+      continue;
+    }
+    const entry = raw as Record<string, unknown>;
+    installed[alias] = {
+      hub: asString(entry.hub),
+    };
+  }
+  return installed;
+}
 
 function normalizeProviders(value: unknown): Record<string, ProviderConfig> {
   if (!value || typeof value !== "object") {
@@ -252,21 +310,4 @@ function deletePath(doc: ReturnType<typeof parseDocument>, dotPath: string): voi
   if (!current.delete(key)) {
     throw new Error(`key ${JSON.stringify(key)} not found`);
   }
-}
-
-function saveConfig(cfg: Config): void {
-  const doc = parseDocument("");
-  const serialized: Record<string, unknown> = {
-    name: cfg.name,
-    hub_url: cfg.hub_url,
-    providers: cfg.providers,
-    llm_provider: cfg.llm_provider,
-    llm_model: cfg.llm_model,
-    embedding_provider: cfg.embedding_provider,
-    embedding_model: cfg.embedding_model,
-    system_prompt: cfg.system_prompt,
-  };
-
-  doc.contents = doc.createNode(serialized) as typeof doc.contents;
-  saveDocument(doc);
 }

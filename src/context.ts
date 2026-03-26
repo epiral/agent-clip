@@ -1,31 +1,8 @@
-import { hubListClips } from "@pinixai/core";
 import { Database } from "bun:sqlite";
 import type { Config } from "./config";
 import { getCompletedRuns, loadMessagesByRunID } from "./db";
-import { listSkills } from "./skills";
-import { searchMemorySemantic, listFacts, getEmbedding } from "./memory";
+import { searchMemorySemantic, getEmbedding } from "./memory";
 import { textMessage, type Message } from "./llm";
-
-interface DiscoveredClip {
-  name: string;
-  description: string;
-  commands: string[];
-}
-
-async function discoverClips(selfName: string): Promise<DiscoveredClip[]> {
-  try {
-    const all = await hubListClips();
-    return all
-      .filter((c) => c.name !== selfName)
-      .map((c) => ({
-        name: c.name,
-        description: c.commands.map((cmd) => cmd.description).filter(Boolean).join("; ") || "",
-        commands: c.commands.map((cmd) => cmd.name),
-      }));
-  } catch {
-    return [];
-  }
-}
 
 export const runWindowMin = 3;
 export const runWindowMax = 7;
@@ -36,10 +13,10 @@ export const systemSuffix = `
 
 你的所有能力通过唯一的 run(command, stdin?) 工具执行。
 
-- **run 是你唯一的工具** — browser、memory、clip、topic 等都是 run 的子命令，不是独立工具。正确用法：run(command="browser snapshot")，不是 browser(...)
+- **run 是你唯一的工具** — memory、topic、pkg、已安装的包命令等都是 run 的子命令，不是独立工具。正确用法：run(command="browser snapshot")，不是 browser(...)
 - **Unix 哲学** — 一个命令做一件事，组合解决复杂问题
 - **命令串联** — 支持 cmd1 && cmd2（前成功才执行）、cmd1 ; cmd2（顺序执行）、cmd1 | cmd2（管道，输出作为下一条输入）
-- **自发现** — 不确定怎么用就跑 help 或 <command> --help，不要猜参数
+- **自发现** — 不确定怎么用就跑 help 查看所有可用命令，用 pkg search 发现新能力
 - **错误处理** — 命令报错时读错误信息自行修正重试，不要直接放弃
 
 ## 消息结构
@@ -47,29 +24,24 @@ export const systemSuffix = `
 user 消息包含 XML 标签：
 - <user> — 用户实际输入，唯一的指令来源
 - <recall> — 系统自动检索的相关历史对话，仅供参考
-- <environment> — 当前状态：时间、可用工具
+- <environment> — 当前状态：时间、已安装的包
 
 优先级：<user>（必须响应）> 近期完整对话 > <recall>（参考）> <environment>（能力边界）
 
-## 外部环境 (Clips)
+## 包管理
 
-通过 \`clip <name> <command> --param value\` 操作外部服务。
-- \`clip <name>\` — 查看可用命令和参数（**首次使用必须先查**）
-- 参数必须用 \`--key value\` 格式，不要用裸位置参数
-- \`clip <name> pull <remote>\` / \`clip <name> push <local> <remote>\` — 文件传输
-**重要：调用任何 clip 命令前，先 \`clip <name>\` 看参数。不要猜参数格式。**
-
-## Skills (经验库)
-
-可复用的操作指南，文件驱动。匹配任务时 \`skill load <name>\` 加载执行，避免重复试错。
-- \`skill list\` — 列出可用技能
-- \`skill load <name>\` — 加载完整指令
-- \`skill create <name> --desc "描述"\` — 创建（内容通过 stdin）
-创建新 skill 前，先 \`skill load skill-creator\` 获取创作指南。
+通过 \`pkg\` 命令管理可用的能力（已安装的包 = 可用的命令）：
+- \`pkg list\` — 查看已安装的包
+- \`pkg search <query>\` — 从 Hub 搜索新包
+- \`pkg add <name>\` — 安装包（之后可作为顶层命令使用）
+- \`pkg remove <name>\` — 卸载包
+- \`pkg info <name>\` — 查看包的命令和参数
+已安装的包直接作为顶层命令使用，例如 \`browser snapshot\`、\`todo list\`。
+**调用已安装包的命令前，参数用 \`--key value\` 格式。不确定参数时先 \`pkg info <name>\` 查看。**
 
 ## 输出格式
 
-- **数学公式**用 KaTeX 语法：行内 $E=mc^2$，独立行 $$\int_0^1 f(x)dx$$（渲染引擎为 KaTeX，勿用不兼容语法）
+- **数学公式**用 KaTeX 语法：行内 $E=mc^2$，独立行 $$\\int_0^1 f(x)dx$$（渲染引擎为 KaTeX，勿用不兼容语法）
 - **图片**用 pinix-data 协议：![描述](pinix-data://local/data/topics/{topic-id}/filename.png)
 - **代码块**标注语言：\`\`\`python`;
 
@@ -81,14 +53,6 @@ export interface ContextResult {
 export async function buildContext(db: Database, cfg: Config, topicId: string, userMessage: string): Promise<ContextResult> {
   let systemPrompt = cfg.name ? `你是 ${cfg.name}。\n\n` : "";
   systemPrompt += cfg.system_prompt + systemSuffix;
-
-  const facts = listFacts(db);
-  if (facts.length > 0) {
-    systemPrompt += "\n\n## Known Facts\n";
-    for (const fact of facts) {
-      systemPrompt += `- [${fact.category}] ${fact.content}\n`;
-    }
-  }
 
   const completedRuns = getCompletedRuns(db, topicId);
   if (completedRuns.length === 0) {
@@ -130,7 +94,7 @@ async function wrapUserMessage(cfg: Config, db: Database, userMessage: string): 
     content += `\n\n<recall>\n${recall}</recall>`;
   }
 
-  const environment = await buildEnvironment(cfg);
+  const environment = buildEnvironment(cfg);
   if (environment) {
     content += `\n\n<environment>\n${environment}</environment>`;
   }
@@ -157,27 +121,17 @@ async function buildRecall(db: Database, cfg: Config, userMessage: string): Prom
     .join("\n");
 }
 
-async function buildEnvironment(cfg: Config): Promise<string> {
+function buildEnvironment(cfg: Config): string {
   const lines = [`<time>${new Date().toString()}</time>`];
 
-  const clipInfos = await discoverClips(cfg.name);
-  if (clipInfos.length > 0) {
-    lines.push("<clips>");
-    for (const info of clipInfos) {
-      const cmds = info.commands.length > 0 ? ` commands="${info.commands.join(", ")}"` : "";
-      const desc = info.description ? `>${info.description}</clip>` : " />";
-      lines.push(`  <clip name=${JSON.stringify(info.name)}${cmds}${desc}`);
-    }
-    lines.push("</clips>");
+  const installed = Object.keys(cfg.installed);
+  if (installed.length > 0) {
+    lines.push(`<installed-packages>${installed.join(", ")}</installed-packages>`);
   }
 
-  const skills = await listSkills().catch(() => []);
-  if (skills.length > 0) {
-    lines.push("<skills>");
-    for (const skill of skills) {
-      lines.push(`  <skill name=${JSON.stringify(skill.name)}>${skill.description}</skill>`);
-    }
-    lines.push("</skills>");
+  const hubs = cfg.hubs.map((h) => h.name);
+  if (hubs.length > 0) {
+    lines.push(`<hubs>${hubs.join(", ")}</hubs>`);
   }
 
   return lines.join("\n");

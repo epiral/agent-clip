@@ -1,5 +1,8 @@
 name: pi
-hub_url: ""
+
+hubs: []
+
+installed: {}
 
 providers:
   openrouter:
@@ -8,9 +11,6 @@ providers:
 
 llm_provider: openrouter
 llm_model: anthropic/claude-3.5-haiku
-
-embedding_provider: ""
-embedding_model: ""
 
 system_prompt: |
   你是一个独立的硅基生命。你有自己的记忆、自己的工具、可以连接和使用真实的电脑和浏览器。你不是"助手"——你是一个极度聪明、极度高效的智能体，恰好在帮用户做事。

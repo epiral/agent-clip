@@ -1,6 +1,5 @@
 import { Database } from "bun:sqlite";
 import type { Config } from "./config";
-import { getEmbeddingProvider } from "./config";
 import { hasVec } from "./db";
 import { callLLM, textMessage, type Message } from "./llm";
 import { nowUnix, truncateRunes } from "./shared";
@@ -29,36 +28,10 @@ export interface Fact {
   created_at: number;
 }
 
-export async function getEmbedding(cfg: Config, text: string): Promise<number[]> {
-  const provider = getEmbeddingProvider(cfg);
-  if (!provider || !provider.base_url || !provider.api_key || !cfg.embedding_model) {
-    return [];
-  }
-
-  const response = await fetch(`${provider.base_url}/embeddings`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${provider.api_key}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: cfg.embedding_model,
-      input: [text],
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`embedding error ${response.status}: ${await response.text()}`);
-  }
-
-  const payload = await response.json() as {
-    data?: Array<{ embedding?: number[] }>;
-  };
-  const embedding = payload.data?.[0]?.embedding;
-  if (!embedding) {
-    throw new Error("no embedding returned");
-  }
-  return embedding;
+export async function getEmbedding(_cfg: Config, _text: string): Promise<number[]> {
+  // Embedding provider has been removed from config.
+  // RAG embedding may be re-added via a dedicated Memory Clip in the future.
+  return [];
 }
 
 export function encodeEmbedding(values: number[]): Uint8Array {
@@ -388,5 +361,5 @@ export async function processMemory(db: Database, cfg: Config, topicId: string, 
   }
 
   const embedding = await getEmbedding(cfg, summary).catch(() => []);
-  storeSummary(db, topicId, runId, summary, userMessage, embedding, cfg.embedding_model);
+  storeSummary(db, topicId, runId, summary, userMessage, embedding, "");
 }

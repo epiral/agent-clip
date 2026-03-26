@@ -1,8 +1,8 @@
 {
   "name": "agent",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "clip",
-  "description": "AI Agent — agentic loop with memory, tools, and vision",
+  "description": "AI Agent — agentic loop with shell, packages, and memory",
   "domain": "ai",
   "runtime": "bun",
   "main": "index.ts",
@@ -15,7 +15,6 @@
     { "name": "get-run", "description": "获取运行状态" },
     { "name": "cancel-run", "description": "取消运行" },
     { "name": "config", "description": "配置管理" },
-    { "name": "skill", "description": "技能管理" },
     { "name": "upload", "description": "上传附件" }
   ],
   "dependencies": {
