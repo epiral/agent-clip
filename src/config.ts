@@ -16,6 +16,7 @@ export interface HubConfig {
 
 export interface InstalledClip {
   hub: string; // hub name
+  token?: string; // clip token for authenticated invocations
 }
 
 export interface Config {
@@ -62,9 +63,14 @@ export function loadConfig(): Config {
   ensureConfigExists();
   const raw = readFileSync(configPath(), "utf8");
   const parsed = parseDocument(raw).toJS() as Record<string, unknown> | null;
+  let hubs = normalizeHubs(parsed?.hubs);
+  if (hubs.length === 0 && typeof parsed?.hub_url === "string" && parsed.hub_url) {
+    hubs = [{ url: parsed.hub_url as string, name: "default" }];
+  }
+
   const cfg: Config = {
     name: asString(parsed?.name),
-    hubs: normalizeHubs(parsed?.hubs),
+    hubs,
     installed: normalizeInstalled(parsed?.installed),
     providers: normalizeProviders(parsed?.providers),
     llm_provider: asString(parsed?.llm_provider),
@@ -205,6 +211,7 @@ function normalizeInstalled(value: unknown): Record<string, InstalledClip> {
     const entry = raw as Record<string, unknown>;
     installed[alias] = {
       hub: asString(entry.hub),
+      token: asOptionalString(entry.token),
     };
   }
   return installed;

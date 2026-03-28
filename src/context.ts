@@ -13,7 +13,7 @@ export const systemSuffix = `
 
 你的所有能力通过唯一的 run(command, stdin?) 工具执行。
 
-- **run 是你唯一的工具** — memory、topic、pkg、已安装的包命令等都是 run 的子命令，不是独立工具。正确用法：run(command="browser snapshot")，不是 browser(...)
+- **run 是你唯一的工具** — memory、topic、pkg、已安装的包命令等都是 run 的子命令，不是独立工具。正确用法：run(command="<command> <subcommand> --param value")，不是 command(...)
 - **Unix 哲学** — 一个命令做一件事，组合解决复杂问题
 - **命令串联** — 支持 cmd1 && cmd2（前成功才执行）、cmd1 ; cmd2（顺序执行）、cmd1 | cmd2（管道，输出作为下一条输入）
 - **自发现** — 不确定怎么用就跑 help 查看所有可用命令，用 pkg search 发现新能力
@@ -36,7 +36,7 @@ user 消息包含 XML 标签：
 - \`pkg add <name>\` — 安装包（之后可作为顶层命令使用）
 - \`pkg remove <name>\` — 卸载包
 - \`pkg info <name>\` — 查看包的命令和参数
-已安装的包直接作为顶层命令使用，例如 \`browser snapshot\`、\`todo list\`。
+已安装的包直接作为顶层命令使用，例如 \`todo list\`、\`todo add --title "买牛奶"\`。
 **调用已安装包的命令前，参数用 \`--key value\` 格式。不确定参数时先 \`pkg info <name>\` 查看。**
 
 ## 输出格式

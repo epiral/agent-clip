@@ -16,8 +16,5 @@
     { "name": "cancel-run", "description": "取消运行" },
     { "name": "config", "description": "配置管理" },
     { "name": "upload", "description": "上传附件" }
-  ],
-  "dependencies": {
-    "browser": { "package": "bb-browser", "version": "^1.0.0" }
-  }
+  ]
 }

@@ -1,10 +1,8 @@
-import { hubListClips } from '@pinixai/core';
-import { hubInvoke } from '@pinixai/core/src/hub';
+import { hubInvoke, hubListClips } from '@pinixai/core';
 import { Database } from 'bun:sqlite';
 import { parseChain, Operator } from './chain';
 import {
   type Config,
-  type InstalledClip,
   addInstalledClip,
   configDelete,
   configSet,
@@ -225,7 +223,7 @@ export function buildRegistry(db: Database, cfg: Config): Registry {
   registerTopicCommands(registry.register.bind(registry), db, cfg);
   registerEventCommands(registry.register.bind(registry), db);
   registerConfigCommands(registry.register.bind(registry));
-  registerPkgCommands(registry.register.bind(registry), cfg);
+  registerPkgCommands(registry, cfg);
   registerInstalledClipCommands(registry, cfg);
   return registry;
 }
@@ -463,8 +461,8 @@ function registerConfigCommands(register: RegisterFn): void {
   );
 }
 
-function registerPkgCommands(register: RegisterFn, cfg: Config): void {
-  register(
+function registerPkgCommands(registry: Registry, cfg: Config): void {
+  registry.register(
     'pkg',
     [
       'Manage installed packages (Clips).',
@@ -483,7 +481,7 @@ function registerPkgCommands(register: RegisterFn, cfg: Config): void {
         case 'search':
           return pkgSearch(cfg, args.slice(1));
         case 'add':
-          return pkgAdd(cfg, args.slice(1));
+          return pkgAdd(registry, cfg, args.slice(1));
         case 'remove':
           return pkgRemove(args.slice(1));
         case 'info':
@@ -546,7 +544,7 @@ async function pkgSearch(cfg: Config, args: string[]): Promise<string> {
   return allResults.join('\n');
 }
 
-async function pkgAdd(cfg: Config, args: string[]): Promise<string> {
+async function pkgAdd(registry: Registry, cfg: Config, args: string[]): Promise<string> {
   if (args.length === 0) {
     throw new Error('usage: pkg add <name> [--hub <hub-name>]');
   }
@@ -588,11 +586,14 @@ async function pkgAdd(cfg: Config, args: string[]): Promise<string> {
   }
 
   // Verify the hub name exists in config
-  if (!cfg.hubs.find((h) => h.name === hubName)) {
+  const hub = cfg.hubs.find((h) => h.name === hubName);
+  if (!hub) {
     throw new Error(`Hub "${hubName}" not found in config.`);
   }
 
   addInstalledClip(name, hubName);
+  cfg.installed[name] = { hub: hubName };
+  registerSingleClipCommand(registry, cfg, name, hub.url);
   return `Installed "${name}" from hub "${hubName}". It is now available as a command.`;
 }
 
@@ -681,36 +682,41 @@ function registerInstalledClipCommands(registry: Registry, cfg: Config): void {
     if (!hubUrl) {
       continue;
     }
-
-    registry.register(
-      alias,
-      `Installed package (hub: ${clipInfo.hub}). Run "${alias} <command> [--param value]" or just "${alias}" for info.`,
-      async (args, stdin) => {
-        if (args.length === 0) {
-          // Show clip info
-          return pkgInfo(cfg, [alias]);
-        }
-
-        const command = args[0];
-        const input = buildClipInvokeInput(args.slice(1), stdin);
-
-        try {
-          const result = await hubInvoke(alias, command, input, undefined, hubUrl);
-          if (typeof result === 'string') {
-            return result;
-          }
-          return JSON.stringify(result, null, 2);
-        } catch (error) {
-          // Try to give a usage hint
-          const hint = await getCommandUsageHint(alias, command, hubUrl);
-          if (hint) {
-            throw new Error(`${toErrorMessage(error)}\n\n${hint}`);
-          }
-          throw error;
-        }
-      },
-    );
+    registerSingleClipCommand(registry, cfg, alias, hubUrl);
   }
+}
+
+function registerSingleClipCommand(registry: Registry, cfg: Config, alias: string, hubUrl: string): void {
+  const clipInfo = cfg.installed[alias];
+  const hubLabel = clipInfo?.hub ?? 'unknown';
+  registry.register(
+    alias,
+    `Installed package (hub: ${hubLabel}). Run "${alias} <command> [--param value]" or just "${alias}" for info.`,
+    async (args, stdin) => {
+      if (args.length === 0) {
+        // Show clip info
+        return pkgInfo(cfg, [alias]);
+      }
+
+      const command = args[0];
+      const input = buildClipInvokeInput(args.slice(1), stdin);
+
+      try {
+        const result = await hubInvoke(alias, command, input, clipInfo?.token, hubUrl);
+        if (typeof result === 'string') {
+          return result;
+        }
+        return JSON.stringify(result, null, 2);
+      } catch (error) {
+        // Try to give a usage hint
+        const hint = await getCommandUsageHint(alias, command, hubUrl);
+        if (hint) {
+          throw new Error(`${toErrorMessage(error)}\n\n${hint}`);
+        }
+        throw error;
+      }
+    },
+  );
 }
 
 async function getCommandUsageHint(clipName: string, command: string, hubUrl: string): Promise<string | null> {

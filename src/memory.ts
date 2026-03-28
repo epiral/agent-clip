@@ -21,13 +21,6 @@ export interface SearchFilter {
   limit?: number;
 }
 
-export interface Fact {
-  id: number;
-  content: string;
-  category: string;
-  created_at: number;
-}
-
 export async function getEmbedding(_cfg: Config, _text: string): Promise<number[]> {
   // Embedding provider has been removed from config.
   // RAG embedding may be re-added via a dedicated Memory Clip in the future.
@@ -339,18 +332,6 @@ export async function generateSummary(db: Database, cfg: Config, newMessages: Me
   ], [], null, null);
 
   return response.content.trim();
-}
-
-export function storeFact(db: Database, content: string, category = "general"): void {
-  db.query("INSERT INTO facts (content, category, created_at) VALUES (?, ?, ?)").run(content, category, nowUnix());
-}
-
-export function listFacts(db: Database): Fact[] {
-  return db.query<Fact, []>("SELECT id, content, category, created_at FROM facts ORDER BY created_at DESC").all();
-}
-
-export function deleteFact(db: Database, id: number): void {
-  db.query("DELETE FROM facts WHERE id = ?").run(id);
 }
 
 export async function processMemory(db: Database, cfg: Config, topicId: string, runId: string, newMessages: Message[]): Promise<void> {
