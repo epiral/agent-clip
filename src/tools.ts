@@ -693,8 +693,7 @@ function registerSingleClipCommand(registry: Registry, cfg: Config, alias: strin
     alias,
     `Installed package (hub: ${hubLabel}). Run "${alias} <command> [--param value]" or just "${alias}" for info.`,
     async (args, stdin) => {
-      if (args.length === 0) {
-        // Show clip info
+      if (args.length === 0 || args[0] === '--help' || args[0] === '-h') {
         return pkgInfo(cfg, [alias]);
       }
 
