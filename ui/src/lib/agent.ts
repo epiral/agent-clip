@@ -169,13 +169,12 @@ export interface ProviderInfo {
 
 export interface AgentConfig {
   name: string;
+  hubs: Array<{ url: string; name: string }>;
+  installed: Record<string, { hub: string }>;
   providers: Record<string, ProviderInfo>;
   llm_provider: string;
   llm_model: string;
-  embedding_provider: string;
-  embedding_model: string;
   system_prompt: string;
-  clips: string[];
 }
 
 export async function getConfig(): Promise<AgentConfig> {
@@ -188,46 +187,6 @@ export async function setConfig(key: string, value: string): Promise<void> {
 
 export async function deleteConfig(key: string): Promise<void> {
   await invoke("config", { args: ["delete", key] });
-}
-
-export async function addClip(name: string): Promise<void> {
-  await invoke("config", { args: ["add-clip", name] });
-}
-
-export async function removeClip(name: string): Promise<void> {
-  await invoke("config", { args: ["remove-clip", name] });
-}
-
-// ─── Skills ───
-
-export interface SkillInfo {
-  name: string;
-  description: string;
-}
-
-export interface SkillDetail {
-  name: string;
-  description: string;
-  content: string;
-}
-
-export async function listSkills(): Promise<SkillInfo[]> {
-  return invoke<SkillInfo[]>("skill", { args: ["list"] });
-}
-
-export async function getSkill(name: string): Promise<SkillDetail> {
-  return invoke<SkillDetail>("skill", { args: ["get", name] });
-}
-
-export async function saveSkill(skill: SkillDetail): Promise<void> {
-  await invoke("skill", {
-    args: ["save"],
-    stdin: JSON.stringify(skill),
-  });
-}
-
-export async function deleteSkill(name: string): Promise<void> {
-  await invoke("skill", { args: ["delete", name] });
 }
 
 export function isConfigReady(config: AgentConfig): boolean {

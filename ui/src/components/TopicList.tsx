@@ -1,5 +1,5 @@
 import type { Topic } from "../lib/types";
-import { Plus, Settings, BookOpen, MessageSquare, MoreHorizontal, FileText } from "lucide-react";
+import { Plus, Settings, MessageSquare, MoreHorizontal, FileText } from "lucide-react";
 import { useI18n } from "../lib/i18n";
 
 interface TopicListProps {
@@ -7,7 +7,6 @@ interface TopicListProps {
   currentTopicId: string | null;
   onSelectTopic: (id: string | null) => void;
   onOpenConfig: () => void;
-  onOpenSkills: () => void;
   onCloseMobileNav?: () => void;
 }
 
@@ -27,7 +26,6 @@ export function TopicList({
   currentTopicId,
   onSelectTopic,
   onOpenConfig,
-  onOpenSkills,
   onCloseMobileNav,
 }: TopicListProps) {
   const { t } = useI18n();
@@ -111,19 +109,13 @@ export function TopicList({
         </div>
       </div>
 
-      <div className="p-4 border-t border-border bg-paper grid grid-cols-[1fr,auto] gap-2">
+      <div className="p-4 border-t border-border bg-paper">
         <button
-          className="outline-button flex items-center gap-2 h-10 px-3"
-          onClick={onOpenSkills}
-        >
-          <BookOpen className="w-4 h-4 shrink-0" />
-          <span className="truncate">{t("Skills")}</span>
-        </button>
-        <button
-          className="outline-button flex items-center justify-center w-10 h-10 p-0"
+          className="outline-button flex items-center justify-center gap-2 w-full h-10"
           onClick={onOpenConfig}
         >
           <Settings className="w-4 h-4" />
+          <span>{t("Settings")}</span>
         </button>
       </div>
     </div>
