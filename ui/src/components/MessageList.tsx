@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useImperativeHandle, forwardRef } from "react";
 import type { ChatMessage } from "../lib/types";
 import { MessageBubble } from "./MessageBubble";
-import { Code, Sparkles, Terminal, FileText, Zap, ChevronDown } from "lucide-react";
+import { Globe, Sparkles, Search, Package, ChevronDown } from "lucide-react";
 import { useI18n } from "../lib/i18n";
 
 interface MessageListProps {
@@ -85,36 +85,36 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(funct
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-8 h-full w-full bg-paper overflow-y-auto no-scrollbar">
         <div className="max-w-2xl w-full space-y-12">
-          <div className="space-y-4">
-            <div className="w-12 h-12 border border-ink flex items-center justify-center mb-8">
-              <Sparkles className="w-6 h-6 text-ink" />
+          <div className="space-y-5">
+            <div className="w-12 h-12 rounded-lg border border-border flex items-center justify-center mb-6">
+              <Sparkles className="w-5 h-5 text-muted" />
             </div>
-            <h2 className="text-5xl md:text-6xl font-serif font-bold tracking-tight text-ink leading-tight">
+            <h2 className="text-4xl md:text-5xl font-serif font-bold tracking-tight text-ink leading-tight">
               {t("How can I help you today?")}
             </h2>
-            <p className="text-muted font-serif italic text-lg opacity-80 border-l border-border pl-6 py-2">
+            <p className="text-muted text-[15px] leading-relaxed max-w-md">
               {t("I'm your AI assistant, ready to help with code, analysis, writing, and more.")}
             </p>
           </div>
-          
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-px border border-border bg-border">
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {[
-              { icon: FileText, label: t("Summarize text"), desc: "Get the gist of any document" },
-              { icon: Code, label: t("Write code"), desc: "Build components or solve bugs" },
-              { icon: Terminal, label: t("Run sandbox"), desc: "Execute scripts in a safe env" },
-              { icon: Zap, label: t("Analyze data"), desc: "Find patterns and insights" },
+              { icon: Globe, prompt: t("Browse a website"), desc: t("browse_desc") },
+              { icon: Search, prompt: t("Search something"), desc: t("search_desc") },
+              { icon: Package, prompt: t("List my clips"), desc: t("clips_desc") },
+              { icon: Sparkles, prompt: t("What can you do?"), desc: t("abilities_desc") },
             ].map((item) => (
-              <button 
-                key={item.label}
-                onClick={() => onSendPrompt?.(item.label)}
-                className="group flex items-start gap-4 p-6 bg-paper hover:bg-surface-hover transition-colors text-left"
+              <button
+                key={item.prompt}
+                onClick={() => onSendPrompt?.(item.prompt)}
+                className="group flex items-start gap-3.5 p-4 rounded-lg border border-border bg-surface hover:bg-surface-hover hover:border-muted transition-all text-left"
               >
-                <div className="w-10 h-10 border border-border flex items-center justify-center group-hover:border-ink transition-colors shrink-0">
-                  <item.icon className="w-5 h-5 text-muted group-hover:text-ink transition-colors" />
+                <div className="w-9 h-9 rounded-md bg-paper border border-border flex items-center justify-center group-hover:border-muted transition-colors shrink-0 mt-0.5">
+                  <item.icon className="w-4 h-4 text-muted group-hover:text-ink transition-colors" />
                 </div>
-                <div className="flex flex-col">
-                  <span className="signature-label text-ink">{item.label}</span>
-                  <span className="text-[11px] text-muted font-mono uppercase tracking-tight mt-1 opacity-60 group-hover:opacity-100 transition-opacity">
+                <div className="flex flex-col gap-0.5 min-w-0">
+                  <span className="text-sm font-medium text-ink">{item.prompt}</span>
+                  <span className="text-xs text-muted leading-relaxed">
                     {item.desc}
                   </span>
                 </div>
@@ -144,10 +144,10 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(funct
         <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20">
           <button
             onClick={scrollToBottom}
-            className="ink-button flex items-center gap-3 px-6 h-12 transition-all active:scale-95"
+            className="flex items-center gap-2 px-4 h-9 rounded-full bg-ink text-paper text-xs font-medium shadow-lg transition-all hover:bg-ink/90 active:scale-95"
           >
-            <ChevronDown className="w-4 h-4" />
-            <span>{t("New messages")}</span>
+            <ChevronDown className="w-3.5 h-3.5" />
+            <span>{t("Scroll to bottom")}</span>
           </button>
         </div>
       )}
