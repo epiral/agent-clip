@@ -1,7 +1,6 @@
 {
-  "name": "clip-agent",
-  "version": "0.2.0",
-  "private": true,
+  "name": "@pinix/agent",
+  "version": "0.2.4",
   "type": "module",
   "scripts": {
     "dev": "/Users/cp/.bun/bin/bun run index.ts",
@@ -9,7 +8,8 @@
     "typecheck": "/Users/cp/.bun/bin/tsc --noEmit"
   },
   "dependencies": {
-    "@pinixai/core": "file:/Users/cp/Developer/epiral/repos/pinixai-core",
+    "@pinixai/core": "^0.7.1",
+    "sqlite-vec": "^0.1.7",
     "yaml": "^2.8.1"
   },
   "devDependencies": {

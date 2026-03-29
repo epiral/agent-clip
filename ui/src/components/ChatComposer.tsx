@@ -114,16 +114,16 @@ export function ChatComposer({ onSend, onCancel, isStreaming, agentName }: ChatC
 
   return (
     <div
-      className={`flex flex-col border-t border-border transition-colors ${isDragging ? 'bg-active/5' : ''}`}
+      className={`flex flex-col transition-colors ${isDragging ? 'bg-active/5' : ''}`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
       {attachments.length > 0 && (
-        <div className="flex gap-4 px-4 pt-4 overflow-x-auto no-scrollbar">
+        <div className="flex gap-3 px-4 pt-3 overflow-x-auto no-scrollbar">
           {attachments.map((att, i) => (
             <div key={att.preview} className="relative shrink-0 group/thumb">
-              <div className="relative h-16 w-16 border border-border">
+              <div className="relative h-16 w-16 rounded-md border border-border overflow-hidden">
                 <img
                   src={att.preview}
                   alt={att.file.name}
@@ -133,7 +133,7 @@ export function ChatComposer({ onSend, onCancel, isStreaming, agentName }: ChatC
               <button
                 type="button"
                 onClick={() => removeAttachment(i)}
-                className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-ink text-paper border border-border flex items-center justify-center opacity-0 group-hover/thumb:opacity-100 transition-opacity"
+                className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-ink text-paper rounded-full flex items-center justify-center opacity-0 group-hover/thumb:opacity-100 transition-opacity shadow-sm"
               >
                 <X className="h-3 w-3" />
               </button>
@@ -142,14 +142,14 @@ export function ChatComposer({ onSend, onCancel, isStreaming, agentName }: ChatC
         </div>
       )}
 
-      <div className="flex items-end p-2 md:p-4 gap-2">
+      <div className="flex items-end p-3 md:px-4 md:py-3 gap-1.5">
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
-          className="p-2 text-muted hover:text-ink transition-colors"
+          className="p-2 rounded-md text-muted hover:text-ink hover:bg-surface-hover transition-colors"
           disabled={isStreaming}
         >
-          <Paperclip className="h-5 w-5" />
+          <Paperclip className="h-4.5 w-4.5" />
         </button>
         <input
           ref={fileInputRef}
@@ -170,7 +170,7 @@ export function ChatComposer({ onSend, onCancel, isStreaming, agentName }: ChatC
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
           placeholder={t("Ask {name} anything...", { name: agentName || "Agent" })}
-          className="flex-1 min-h-[40px] max-h-[240px] resize-none border-none bg-transparent focus:ring-0 px-2 py-2 text-[16px] md:text-sm leading-relaxed placeholder:text-muted/50 placeholder:italic placeholder:font-serif no-scrollbar"
+          className="flex-1 min-h-[40px] max-h-[240px] resize-none border-none bg-transparent focus:ring-0 focus:outline-none px-2 py-2 text-[16px] md:text-sm leading-relaxed placeholder:text-muted/50 no-scrollbar"
           rows={1}
         />
 
@@ -178,7 +178,7 @@ export function ChatComposer({ onSend, onCancel, isStreaming, agentName }: ChatC
           {isStreaming ? (
             <button
               onClick={onCancel}
-              className="p-2 text-urgent hover:bg-urgent/10 transition-colors"
+              className="p-2 rounded-md text-urgent hover:bg-urgent/10 transition-colors"
             >
               <Square className="h-4 w-4 fill-current" />
             </button>
@@ -186,9 +186,9 @@ export function ChatComposer({ onSend, onCancel, isStreaming, agentName }: ChatC
             <button
               onClick={handleSend}
               disabled={!hasContent}
-              className="ink-button h-10 w-10 p-0 flex items-center justify-center"
+              className="ink-button h-9 w-9 p-0 flex items-center justify-center rounded-lg"
             >
-              <ArrowUp className="h-5 w-5" />
+              <ArrowUp className="h-4.5 w-4.5" />
             </button>
           )}
         </div>

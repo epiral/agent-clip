@@ -48,21 +48,22 @@ export function MessageBubble({ message, agentName }: MessageBubbleProps) {
   const isStreaming = message.status === "streaming";
 
   return (
-    <div className="w-full border-b border-border bg-paper hover:bg-surface-hover/30 transition-colors">
-      <div className="max-w-4xl mx-auto py-8 px-4 md:px-8">
-        <div className="flex flex-col gap-4">
+    <div className="w-full bg-paper">
+      <div className="max-w-3xl mx-auto py-4 px-4 md:px-8">
+        <div className="flex flex-col gap-1.5">
           <div className="flex items-center justify-between">
-            <span className={`signature-label ${isUser ? 'text-muted' : 'text-ink'}`}>
+            <span className={`text-[11px] font-semibold uppercase tracking-wider ${isUser ? 'text-muted' : 'text-ink'}`}>
               {isUser ? t("YOU") : (agentName || "AGENT")}
             </span>
             {isStreaming && (
-              <span className="text-[10px] font-mono text-active font-bold animate-pulse uppercase tracking-widest">
+              <span className="flex items-center gap-1.5 text-[11px] text-active font-medium">
+                <span className="w-1.5 h-1.5 bg-active rounded-full animate-pulse" />
                 {t("Responding")}
               </span>
             )}
           </div>
 
-          <div className="w-full space-y-6 overflow-hidden min-w-0">
+          <div className="w-full space-y-2 overflow-hidden min-w-0">
             {message.blocks.map((block, idx) => (
               <BlockRenderer
                 key={idx}
@@ -74,14 +75,14 @@ export function MessageBubble({ message, agentName }: MessageBubbleProps) {
 
             {isStreaming && message.blocks.length === 0 && (
               <div className="flex items-center gap-2">
-                <span className="w-1.5 h-1.5 bg-active animate-pulse" />
-                <span className="signature-label text-[8px] text-muted">{t("Initializing resonance...")}</span>
+                <span className="w-1.5 h-1.5 bg-active rounded-full animate-pulse" />
+                <span className="text-xs text-muted">{t("Initializing resonance...")}</span>
               </div>
             )}
 
             {message.status === "error" && (
-              <div className="text-urgent text-[12px] font-mono p-4 border border-urgent/20 bg-urgent/5 flex gap-4 items-start">
-                <div className="font-bold shrink-0">[!]</div>
+              <div className="text-urgent text-xs font-mono p-3 rounded-md border border-urgent/20 bg-urgent/5 flex gap-3 items-start">
+                <div className="font-bold shrink-0">!</div>
                 <div className="leading-relaxed">
                   {message.blocks.find(b => b.type === "text")?.content || "An error occurred during generation."}
                 </div>
@@ -118,7 +119,7 @@ function BlockRenderer({ block, isStreaming, isLastBlock }: {
       );
     case "image":
       return (
-        <div className="border border-border p-2 bg-surface inline-block">
+        <div className="rounded-md border border-border overflow-hidden inline-block">
           <img
             src={block.url}
             alt={block.name}

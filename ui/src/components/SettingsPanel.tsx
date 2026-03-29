@@ -206,7 +206,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
 
             <Section title={t("Hubs")}>
               <div className="space-y-2">
-                {config.hubs.length === 0 ? (
+                {!config.hubs || config.hubs.length === 0 ? (
                   <div className="py-8 text-center border border-dashed border-border">
                     <p className="signature-label text-muted/40">{t("No hubs connected")}</p>
                   </div>
@@ -226,7 +226,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
 
             <Section title={t("Installed Packages")}>
               <div className="space-y-2">
-                {Object.keys(config.installed).length === 0 ? (
+                {!config.installed || Object.keys(config.installed).length === 0 ? (
                   <div className="py-8 text-center border border-dashed border-border">
                     <p className="signature-label text-muted/40">{t("No packages installed")}</p>
                   </div>

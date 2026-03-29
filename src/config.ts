@@ -45,6 +45,23 @@ export interface ConfigJSON {
   system_prompt: string;
 }
 
+const DEFAULT_CONFIG = `name: pi
+
+hubs: []
+
+installed: {}
+
+providers:
+  openrouter:
+    base_url: https://openrouter.ai/api/v1
+    api_key: ""
+
+llm_provider: openrouter
+llm_model: anthropic/claude-3.5-haiku
+
+system_prompt: ""
+`;
+
 export function ensureConfigExists(): void {
   ensureDataLayout();
   if (existsSync(configPath())) {
@@ -52,11 +69,11 @@ export function ensureConfigExists(): void {
   }
 
   const seedConfig = seedRoot("config.yaml");
-  if (!existsSync(seedConfig)) {
-    throw new Error(`missing config file at ${configPath()}`);
+  if (existsSync(seedConfig)) {
+    copyFileSync(seedConfig, configPath());
+  } else {
+    writeFileSync(configPath(), DEFAULT_CONFIG, "utf8");
   }
-
-  copyFileSync(seedConfig, configPath());
 }
 
 export function loadConfig(): Config {

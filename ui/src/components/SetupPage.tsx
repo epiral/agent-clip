@@ -11,11 +11,11 @@ const PROVIDER_PRESETS: Record<string, { label: string; base_url: string; protoc
     base_url: "https://openrouter.ai/api/v1",
     protocol: "openai",
     models: [
-      "anthropic/claude-3.5-sonnet",
-      "anthropic/claude-3.5-haiku",
-      "openai/gpt-4o",
-      "openai/gpt-4o-mini",
-      "google/gemini-2.0-flash",
+      "anthropic/claude-sonnet-4-6",
+      "anthropic/claude-opus-4-6",
+      "openai/gpt-5.4",
+      "openai/gpt-5.4-mini",
+      "google/gemini-3-flash-preview",
       "deepseek/deepseek-chat",
     ],
   },
@@ -23,25 +23,25 @@ const PROVIDER_PRESETS: Record<string, { label: string; base_url: string; protoc
     label: "OpenAI",
     base_url: "https://api.openai.com/v1",
     protocol: "openai",
-    models: ["gpt-4o", "gpt-4o-mini", "o1", "o3-mini"],
+    models: ["gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano", "gpt-4o"],
   },
   anthropic: {
     label: "Anthropic",
     base_url: "https://api.anthropic.com",
     protocol: "anthropic",
-    models: ["claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022", "claude-3-opus-20240229"],
+    models: ["claude-sonnet-4-6", "claude-opus-4-6", "claude-haiku-4-5-20251001"],
   },
   dashscope: {
     label: "DashScope (Qwen)",
     base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1",
     protocol: "openai",
-    models: ["qwen-max", "qwen-plus", "qwen-turbo"],
+    models: ["qwen3-max", "qwen-max", "qwen-plus", "qwen-turbo"],
   },
   minimax: {
     label: "MiniMax",
     base_url: "https://api.minimaxi.com/anthropic",
     protocol: "anthropic",
-    models: ["MiniMax-M2.5", "MiniMax-M2.5-highspeed"],
+    models: ["MiniMax-M2.7", "MiniMax-M2.5", "MiniMax-M2.5-highspeed"],
   },
   deepseek: {
     label: "DeepSeek",
@@ -117,13 +117,13 @@ export function SetupPage({ config, onComplete }: SetupPageProps) {
 
   return (
     <div className="flex items-center justify-center min-h-[100dvh] bg-paper p-6 relative overflow-hidden">
-      <div className="w-full max-w-lg space-y-12 relative z-10">
-        <div className="text-center space-y-6">
-          <div className="inline-flex items-center justify-center w-20 h-20 border border-ink text-ink mb-2">
-            <Sparkles className="w-10 h-10" />
+      <div className="w-full max-w-lg space-y-10 relative z-10">
+        <div className="text-center space-y-4">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-xl border border-border text-muted mb-2">
+            <Sparkles className="w-7 h-7" />
           </div>
-          <h1 className="text-5xl font-serif font-bold tracking-tight text-ink">{t("Setup Agent")}</h1>
-          <p className="signature-label text-muted">{t("Configure your AI provider to get started")}</p>
+          <h1 className="text-4xl font-serif font-bold tracking-tight text-ink">{t("Setup Agent")}</h1>
+          <p className="text-sm text-muted">{t("Configure your AI provider to get started")}</p>
         </div>
 
         {error && (
@@ -132,7 +132,7 @@ export function SetupPage({ config, onComplete }: SetupPageProps) {
           </div>
         )}
 
-        <div className="border border-border p-8 space-y-10 bg-surface">
+        <div className="rounded-lg border border-border p-8 space-y-10 bg-surface shadow-sm">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             {/* Identity */}
             <div className="space-y-3">
@@ -248,17 +248,13 @@ export function SetupPage({ config, onComplete }: SetupPageProps) {
 
           {/* Submit */}
           <Button
-            className="w-full h-14 text-[14px] font-bold uppercase tracking-[0.2em]"
+            className="w-full h-12 text-sm font-semibold"
             disabled={!canSubmit || saving}
             onClick={handleSubmit}
           >
             {saving ? t("Saving...") : t("Start Session")}
           </Button>
         </div>
-
-        <p className="text-center signature-label text-muted opacity-40">
-          Powered by Gemini Resonance Engine
-        </p>
       </div>
     </div>
   );
