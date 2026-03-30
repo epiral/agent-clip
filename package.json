@@ -1,6 +1,6 @@
 {
   "name": "@pinix/agent",
-  "version": "0.3.0",
+  "version": "0.3.2",
   "type": "module",
   "scripts": {
     "dev": "/Users/cp/.bun/bin/bun run index.ts",

@@ -189,7 +189,13 @@ export class AgentClipCommands {
     const lines: string[] = [];
     const out = createJSONLChunkOutput((chunk) => {
       lines.push(chunk);
-      stream?.chunk(chunk);
+      if (stream) {
+        for (const line of chunk.split("\n")) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          try { stream.chunk(JSON.parse(trimmed)); } catch { /* skip */ }
+        }
+      }
     });
     const exitCode = await this.handleSend(input, out);
     if (exitCode !== 0) {

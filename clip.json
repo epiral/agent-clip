@@ -1,9 +1,10 @@
 {
   "name": "@pinix/agent",
-  "version": "0.2.4",
-  "description": "AI Agent Clip \u2014 Pinix \u751f\u6001\u4e13\u5c5e Agent",
+  "version": "0.3.2",
+  "description": "AI Agent — agentic loop with shell, packages, and memory",
   "runtime": "bun",
   "main": "index.ts",
+  "web": "web/",
   "author": "yan5xu",
   "license": "MIT"
 }
