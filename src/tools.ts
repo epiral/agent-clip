@@ -3,11 +3,11 @@ import { Database } from 'bun:sqlite';
 import { parseChain, Operator } from './chain';
 import {
   type Config,
+  type HubConfig,
   addInstalledClip,
   configDelete,
   configSet,
   configToText,
-  getHubUrl,
   loadConfig,
   removeInstalledClip,
 } from './config';
@@ -516,7 +516,7 @@ async function pkgSearch(cfg: Config, args: string[]): Promise<string> {
   const allResults: string[] = [];
   for (const hub of cfg.hubs) {
     try {
-      const clips = await hubListClips(hub.url);
+      const clips = await hubListClips(hub.url, hub.token);
       const filtered = query
         ? clips.filter((c) => {
             const searchable = [c.name, c.domain, ...c.commands.map((cmd) => cmd.name), ...c.commands.map((cmd) => cmd.description)].join(' ').toLowerCase();
@@ -567,7 +567,7 @@ async function pkgAdd(registry: Registry, cfg: Config, args: string[]): Promise<
   if (!hubName) {
     for (const hub of cfg.hubs) {
       try {
-        const clips = await hubListClips(hub.url);
+        const clips = await hubListClips(hub.url, hub.token);
         if (clips.find((c) => c.name === name)) {
           hubName = hub.name;
           break;
@@ -593,7 +593,7 @@ async function pkgAdd(registry: Registry, cfg: Config, args: string[]): Promise<
 
   addInstalledClip(name, hubName);
   cfg.installed[name] = { hub: hubName };
-  registerSingleClipCommand(registry, cfg, name, hub.url);
+  registerSingleClipCommand(registry, cfg, name, hub);
   return `Installed "${name}" from hub "${hubName}". It is now available as a command.`;
 }
 
@@ -618,10 +618,10 @@ async function pkgInfo(cfg: Config, args: string[]): Promise<string> {
   let clipInfo: Awaited<ReturnType<typeof hubListClips>>[number] | undefined;
 
   if (entry) {
-    const hubUrl = getHubUrl(cfg, entry.hub);
-    if (hubUrl) {
+    const hubCfg = cfg.hubs.find((h) => h.name === entry.hub);
+    if (hubCfg) {
       try {
-        const clips = await hubListClips(hubUrl);
+        const clips = await hubListClips(hubCfg.url, hubCfg.token);
         clipInfo = clips.find((c) => c.name === name);
       } catch {
         // hub unreachable
@@ -631,7 +631,7 @@ async function pkgInfo(cfg: Config, args: string[]): Promise<string> {
     // Search all hubs
     for (const hub of cfg.hubs) {
       try {
-        const clips = await hubListClips(hub.url);
+        const clips = await hubListClips(hub.url, hub.token);
         clipInfo = clips.find((c) => c.name === name);
         if (clipInfo) break;
       } catch {
@@ -678,15 +678,15 @@ async function pkgInfo(cfg: Config, args: string[]): Promise<string> {
  */
 function registerInstalledClipCommands(registry: Registry, cfg: Config): void {
   for (const [alias, clipInfo] of Object.entries(cfg.installed)) {
-    const hubUrl = getHubUrl(cfg, clipInfo.hub);
-    if (!hubUrl) {
+    const hubCfg = cfg.hubs.find((h) => h.name === clipInfo.hub);
+    if (!hubCfg) {
       continue;
     }
-    registerSingleClipCommand(registry, cfg, alias, hubUrl);
+    registerSingleClipCommand(registry, cfg, alias, hubCfg);
   }
 }
 
-function registerSingleClipCommand(registry: Registry, cfg: Config, alias: string, hubUrl: string): void {
+function registerSingleClipCommand(registry: Registry, cfg: Config, alias: string, hubCfg: HubConfig): void {
   const clipInfo = cfg.installed[alias];
   const hubLabel = clipInfo?.hub ?? 'unknown';
   registry.register(
@@ -701,14 +701,14 @@ function registerSingleClipCommand(registry: Registry, cfg: Config, alias: strin
       const input = buildClipInvokeInput(args.slice(1), stdin);
 
       try {
-        const result = await hubInvoke(alias, command, input, clipInfo?.token, hubUrl);
+        const result = await hubInvoke(alias, command, input, clipInfo?.token, hubCfg.url, hubCfg.token);
         if (typeof result === 'string') {
           return result;
         }
         return JSON.stringify(result, null, 2);
       } catch (error) {
         // Try to give a usage hint
-        const hint = await getCommandUsageHint(alias, command, hubUrl);
+        const hint = await getCommandUsageHint(alias, command, hubCfg);
         if (hint) {
           throw new Error(`${toErrorMessage(error)}\n\n${hint}`);
         }
@@ -718,9 +718,9 @@ function registerSingleClipCommand(registry: Registry, cfg: Config, alias: strin
   );
 }
 
-async function getCommandUsageHint(clipName: string, command: string, hubUrl: string): Promise<string | null> {
+async function getCommandUsageHint(clipName: string, command: string, hubCfg: HubConfig): Promise<string | null> {
   try {
-    const clips = await hubListClips(hubUrl);
+    const clips = await hubListClips(hubCfg.url, hubCfg.token);
     const clip = clips.find((c) => c.name === clipName);
     const cmd = clip?.commands.find((c) => c.name === command);
     if (!cmd?.input) return null;

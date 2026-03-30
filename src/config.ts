@@ -12,6 +12,7 @@ export interface ProviderConfig {
 export interface HubConfig {
   url: string;
   name: string;
+  token?: string;
 }
 
 export interface InstalledClip {
@@ -211,6 +212,7 @@ function normalizeHubs(value: unknown): HubConfig[] {
     .map((item) => ({
       url: asString(item.url),
       name: asString(item.name),
+      token: asOptionalString(item.token),
     }))
     .filter((hub) => hub.url && hub.name);
 }
