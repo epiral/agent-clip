@@ -116,49 +116,49 @@ export function SetupPage({ config, onComplete }: SetupPageProps) {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-[100dvh] bg-paper p-6 relative overflow-hidden">
+    <div className="flex items-center justify-center min-h-[100dvh] bg-background p-6 relative overflow-hidden">
       <div className="w-full max-w-lg space-y-10 relative z-10">
         <div className="text-center space-y-4">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-xl border border-border text-muted mb-2">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-xl border border-border text-muted-foreground mb-2">
             <Sparkles className="w-7 h-7" />
           </div>
-          <h1 className="text-4xl font-serif font-bold tracking-tight text-ink">{t("Setup Agent")}</h1>
-          <p className="text-sm text-muted">{t("Configure your AI provider to get started")}</p>
+          <h1 className="text-4xl font-semibold tracking-tight text-foreground">{t("Setup Agent")}</h1>
+          <p className="text-sm text-muted-foreground">{t("Configure your AI provider to get started")}</p>
         </div>
 
         {error && (
-          <div className="text-urgent text-[12px] font-mono border border-urgent/20 bg-urgent/5 p-4 uppercase tracking-widest text-center">
+          <div className="text-destructive text-[12px] font-mono border border-destructive/20 bg-destructive/5 p-4 uppercase tracking-widest text-center">
             {error}
           </div>
         )}
 
-        <div className="rounded-lg border border-border p-8 space-y-10 bg-surface shadow-sm">
+        <div className="rounded-lg border border-border p-8 space-y-10 bg-card shadow-sm">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             {/* Identity */}
             <div className="space-y-3">
-              <label className="signature-label text-muted font-mono">{t("Agent Name")}</label>
+              <label className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground font-mono">{t("Agent Name")}</label>
               <Input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="pi"
-                className="h-10 border border-border px-3 bg-paper focus-visible:border-ink"
+                className="h-10 border border-border px-3 bg-background focus-visible:border-primary"
               />
             </div>
 
             {/* Provider */}
             <div className="space-y-3">
-              <label className="signature-label text-muted font-mono">{t("AI Provider")}</label>
+              <label className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground font-mono">{t("AI Provider")}</label>
               <div className="relative">
                 <select
                   value={providerKey}
                   onChange={(e) => handleProviderChange(e.target.value)}
-                  className="flex h-10 w-full border border-border bg-paper px-3 py-2 text-sm transition-colors focus:outline-none focus:border-ink appearance-none cursor-pointer"
+                  className="flex h-10 w-full border border-border bg-background px-3 py-2 text-sm transition-colors focus:outline-none focus:border-primary appearance-none cursor-pointer"
                 >
                   {Object.entries(PROVIDER_PRESETS).map(([key, p]) => (
                     <option key={key} value={key}>{p.label}</option>
                   ))}
                 </select>
-                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-muted">
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground">
                   <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="square"/>
                   </svg>
@@ -172,26 +172,26 @@ export function SetupPage({ config, onComplete }: SetupPageProps) {
             {isCustom && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-in fade-in slide-in-from-top-2 duration-300">
                 <div className="space-y-3">
-                  <label className="signature-label text-muted font-mono">Base URL</label>
+                  <label className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground font-mono">Base URL</label>
                   <Input
                     value={customUrl}
                     onChange={(e) => setCustomUrl(e.target.value)}
                     placeholder="https://api.example.com/v1"
-                    className="h-10 border border-border px-3 font-mono text-xs bg-paper focus-visible:border-ink"
+                    className="h-10 border border-border px-3 font-mono text-xs bg-background focus-visible:border-primary"
                   />
                 </div>
                 <div className="space-y-3">
-                  <label className="signature-label text-muted font-mono">Protocol</label>
+                  <label className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground font-mono">Protocol</label>
                   <div className="relative">
                     <select
                       value={customProtocol}
                       onChange={(e) => setCustomProtocol(e.target.value)}
-                      className="flex h-10 w-full border border-border bg-paper px-3 py-2 text-sm transition-colors focus:outline-none focus:border-ink appearance-none cursor-pointer"
+                      className="flex h-10 w-full border border-border bg-background px-3 py-2 text-sm transition-colors focus:outline-none focus:border-primary appearance-none cursor-pointer"
                     >
                       <option value="openai">OpenAI Compatible</option>
                       <option value="anthropic">Anthropic</option>
                     </select>
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-muted">
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground">
                       <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="square"/>
                       </svg>
@@ -204,31 +204,31 @@ export function SetupPage({ config, onComplete }: SetupPageProps) {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               {/* API Key */}
               <div className="space-y-3">
-                <label className="signature-label text-muted font-mono">API Key</label>
+                <label className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground font-mono">API Key</label>
                 <Input
                   type="password"
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
                   placeholder="sk-..."
-                  className="h-10 border border-border px-3 font-mono text-xs bg-paper focus-visible:border-ink"
+                  className="h-10 border border-border px-3 font-mono text-xs bg-background focus-visible:border-primary"
                 />
               </div>
 
               {/* Model */}
               <div className="space-y-3">
-                <label className="signature-label text-muted font-mono">{t("Model")}</label>
+                <label className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground font-mono">{t("Model")}</label>
                 {!isCustom && preset.models.length > 0 ? (
                   <div className="relative">
                     <select
                       value={model}
                       onChange={(e) => setModel(e.target.value)}
-                      className="flex h-10 w-full border border-border bg-paper px-3 py-2 text-sm font-mono transition-colors focus:outline-none focus:border-ink appearance-none cursor-pointer"
+                      className="flex h-10 w-full border border-border bg-background px-3 py-2 text-sm font-mono transition-colors focus:outline-none focus:border-primary appearance-none cursor-pointer"
                     >
                       {preset.models.map((m) => (
                         <option key={m} value={m}>{m}</option>
                       ))}
                     </select>
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-muted">
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground">
                       <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="square"/>
                       </svg>
@@ -239,7 +239,7 @@ export function SetupPage({ config, onComplete }: SetupPageProps) {
                     value={customModel}
                     onChange={(e) => setCustomModel(e.target.value)}
                     placeholder="model-name"
-                    className="h-10 border border-border px-3 font-mono text-xs bg-paper focus-visible:border-ink"
+                    className="h-10 border border-border px-3 font-mono text-xs bg-background focus-visible:border-primary"
                   />
                 )}
               </div>

@@ -13,6 +13,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      '@pinixai/core/web': path.resolve(__dirname, './node_modules/@pinixai/core/src/web.ts'),
     },
   },
   server: {

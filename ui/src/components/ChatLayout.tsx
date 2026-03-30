@@ -69,14 +69,14 @@ export function ChatLayout() {
   if (configState === null) {
     return (
       <div 
-        className="flex flex-col items-center justify-center bg-paper"
+        className="flex flex-col items-center justify-center bg-background"
         style={{ height: "var(--app-height, 100dvh)" }}
       >
         <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 rounded-lg border-2 border-ink flex items-center justify-center animate-pulse">
-            <div className="w-2 h-2 bg-ink rounded-full" />
+          <div className="w-12 h-12 rounded-lg border-2 border-primary flex items-center justify-center animate-pulse">
+            <div className="w-2 h-2 bg-primary rounded-full" />
           </div>
-          <span className="signature-label text-muted animate-pulse">
+          <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground animate-pulse">
             Loading...
           </span>
         </div>
@@ -108,7 +108,7 @@ export function ChatLayout() {
 
   return (
     <div 
-      className="flex w-full overflow-hidden bg-paper text-ink selection:bg-ink selection:text-paper font-sans"
+      className="flex w-full overflow-hidden bg-background text-foreground selection:bg-primary selection:text-primary-foreground font-sans"
       style={{ height: "var(--app-height, 100dvh)" }}
     >
       
@@ -121,7 +121,7 @@ export function ChatLayout() {
 
       {/* Mobile Sidebar (Sheet) */}
       <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
-        <SheetContent side="left" className="p-0 w-[300px] border-r-0 bg-paper">
+        <SheetContent side="left" className="p-0 w-[300px] border-r-0 bg-background">
           {sidebarContent}
         </SheetContent>
       </Sheet>
@@ -130,32 +130,32 @@ export function ChatLayout() {
       <div className="flex-1 flex flex-col min-w-0 relative z-10">
         {/* Header */}
         <header
-          className="flex-shrink-0 h-12 border-b border-border flex items-center px-4 md:px-5 justify-between bg-surface/80 backdrop-blur-sm z-20 pt-[env(safe-area-inset-top)]"
+          className="flex-shrink-0 h-12 border-b border-border flex items-center px-4 md:px-5 justify-between bg-card/80 backdrop-blur-sm z-20 pt-[env(safe-area-inset-top)]"
           style={{ WebkitAppRegion: "drag" } as any}
         >
           <div className="flex items-center gap-3 w-full" style={{ WebkitAppRegion: "no-drag" } as any}>
             <button
-              className="md:hidden shrink-0 p-1.5 rounded-md text-ink hover:bg-surface-hover transition-colors"
+              className="md:hidden shrink-0 p-1.5 rounded-md text-foreground hover:bg-accent transition-colors"
               onClick={() => setMobileMenuOpen(true)}
             >
               <Menu className="h-4.5 w-4.5" />
             </button>
 
             <button
-              className="hidden md:flex shrink-0 p-1.5 rounded-md text-ink hover:bg-surface-hover transition-colors"
+              className="hidden md:flex shrink-0 p-1.5 rounded-md text-foreground hover:bg-accent transition-colors"
               onClick={() => setSidebarOpen(!sidebarOpen)}
             >
               <SidebarIcon className="h-4.5 w-4.5" />
             </button>
 
             <div className="flex flex-col min-w-0 flex-1 md:text-left text-center">
-              <h1 className="text-sm font-medium truncate text-ink">
+              <h1 className="text-sm font-medium truncate text-foreground">
                 {activeTopic ? activeTopic.name : t("New Chat")}
               </h1>
             </div>
 
             <button
-              className="shrink-0 p-1.5 rounded-md text-ink hover:bg-surface-hover transition-colors"
+              className="shrink-0 p-1.5 rounded-md text-foreground hover:bg-accent transition-colors"
               onClick={() => chat.selectTopic(null)}
             >
               <Plus className="h-4.5 w-4.5" />
@@ -165,7 +165,7 @@ export function ChatLayout() {
 
         {/* Global Error Toast */}
         {chat.error && (
-          <div className="px-4 py-2 z-30 shrink-0 bg-urgent/8 border-b border-urgent/20 text-urgent text-xs font-medium text-center">
+          <div className="px-4 py-2 z-30 shrink-0 bg-destructive/8 border-b border-destructive/20 text-destructive text-xs font-medium text-center">
             {chat.error}
           </div>
         )}
@@ -182,7 +182,7 @@ export function ChatLayout() {
         </div>
 
         {/* Input Composer */}
-        <div className="relative z-20 border-t border-border bg-surface">
+        <div className="relative z-20 border-t border-border bg-card">
           <ChatComposer
             onSend={(msg, topicId, files) => chat.send(msg, topicId ?? chat.currentTopicId ?? undefined, files)}
             onCancel={chat.cancel}

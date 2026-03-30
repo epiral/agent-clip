@@ -83,16 +83,16 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(funct
 
   if (messages.length === 0) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center p-8 h-full w-full bg-paper overflow-y-auto no-scrollbar">
+      <div className="flex-1 flex flex-col items-center justify-center p-8 h-full w-full bg-background overflow-y-auto no-scrollbar">
         <div className="max-w-2xl w-full space-y-12">
           <div className="space-y-5">
             <div className="w-12 h-12 rounded-lg border border-border flex items-center justify-center mb-6">
-              <Sparkles className="w-5 h-5 text-muted" />
+              <Sparkles className="w-5 h-5 text-muted-foreground" />
             </div>
-            <h2 className="text-4xl md:text-5xl font-serif font-bold tracking-tight text-ink leading-tight">
+            <h2 className="text-4xl md:text-5xl font-semibold tracking-tight text-foreground leading-tight">
               {t("How can I help you today?")}
             </h2>
-            <p className="text-muted text-[15px] leading-relaxed max-w-md">
+            <p className="text-muted-foreground text-[15px] leading-relaxed max-w-md">
               {t("I'm your AI assistant, ready to help with code, analysis, writing, and more.")}
             </p>
           </div>
@@ -107,14 +107,14 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(funct
               <button
                 key={item.prompt}
                 onClick={() => onSendPrompt?.(item.prompt)}
-                className="group flex items-start gap-3.5 p-4 rounded-lg border border-border bg-surface hover:bg-surface-hover hover:border-muted transition-all text-left"
+                className="group flex items-start gap-3.5 p-4 rounded-lg border border-border bg-card hover:bg-accent hover:border-muted-foreground transition-all text-left"
               >
-                <div className="w-9 h-9 rounded-md bg-paper border border-border flex items-center justify-center group-hover:border-muted transition-colors shrink-0 mt-0.5">
-                  <item.icon className="w-4 h-4 text-muted group-hover:text-ink transition-colors" />
+                <div className="w-9 h-9 rounded-md bg-background border border-border flex items-center justify-center group-hover:border-muted-foreground transition-colors shrink-0 mt-0.5">
+                  <item.icon className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors" />
                 </div>
                 <div className="flex flex-col gap-0.5 min-w-0">
-                  <span className="text-sm font-medium text-ink">{item.prompt}</span>
-                  <span className="text-xs text-muted leading-relaxed">
+                  <span className="text-sm font-medium text-foreground">{item.prompt}</span>
+                  <span className="text-xs text-muted-foreground leading-relaxed">
                     {item.desc}
                   </span>
                 </div>
@@ -144,7 +144,7 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(funct
         <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20">
           <button
             onClick={scrollToBottom}
-            className="flex items-center gap-2 px-4 h-9 rounded-full bg-ink text-paper text-xs font-medium shadow-lg transition-all hover:bg-ink/90 active:scale-95"
+            className="flex items-center gap-2 px-4 h-9 rounded-full bg-primary text-primary-foreground text-xs font-medium shadow-lg transition-all hover:bg-primary/90 active:scale-95"
           >
             <ChevronDown className="w-3.5 h-3.5" />
             <span>{t("Scroll to bottom")}</span>

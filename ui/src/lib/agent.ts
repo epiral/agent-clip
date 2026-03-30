@@ -5,7 +5,7 @@
  * UI components should ONLY call functions from this module.
  */
 
-import { invoke, invokeStream, type StreamEvent } from "./bridge";
+import { invoke, invokeStream, type StreamEvent } from "@pinixai/core/web";
 import type { Topic, Run, SendOptions, HistoryMessage } from "./types";
 
 // ─── Topics ───
