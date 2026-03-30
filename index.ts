@@ -1,10 +1,9 @@
 import { readFileSync } from "node:fs";
-import { Clip, command, handler, serveIPC, z } from "@pinixai/core";
+import { Clip, command, handler, serveIPC, serveHTTP, z } from "@pinixai/core";
 import { InvocationSchema, stripOutputFlag } from "./src/args";
 import { AgentClipCommands, formatLegacyHelp } from "./src/commands";
 import { ensureConfigExists } from "./src/config";
 import { rootPath } from "./src/paths";
-import { ensureSkillsDir } from "./src/skills";
 import { toErrorMessage } from "./src/shared";
 
 interface PinixFileManifest {
@@ -57,21 +56,23 @@ class AgentClip extends Clip {
   @clipCommand("配置管理")
   config = handler(InvocationSchema, AnyOutputSchema, async (input) => await this.runtime.executeCommand("config", input));
 
-  @clipCommand("技能管理")
-  skill = handler(InvocationSchema, AnyOutputSchema, async (input) => await this.runtime.executeCommand("skill", input));
-
   @clipCommand("上传附件")
   upload = handler(InvocationSchema, AnyOutputSchema, async (input) => await this.runtime.executeCommand("upload", input));
 
   async start(): Promise<void> {
     ensureConfigExists();
-    ensureSkillsDir();
 
     const argv = process.argv.slice(2);
     const first = argv[0];
 
     if (!first || first === "--ipc") {
       await serveIPC(this);
+      return;
+    }
+
+    if (first === "--web") {
+      const port = argv[1] ? parseInt(argv[1]) : 3000;
+      await serveHTTP(this, port);
       return;
     }
 

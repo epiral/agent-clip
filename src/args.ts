@@ -1,5 +1,5 @@
 import { z } from "@pinixai/core";
-import { parseOptionalLineCountArgs, parsePositiveInt, readStdinText, safeJSONParse } from "./shared";
+import { parsePositiveInt, readStdinText, safeJSONParse } from "./shared";
 
 export const InvocationSchema = z.object({
   args: z.array(z.string()).optional(),
@@ -29,7 +29,7 @@ export interface ResolvedSendInput {
   isAsync: boolean;
 }
 
-export { parseOptionalLineCountArgs, parsePositiveInt, readStdinText };
+export { parsePositiveInt, readStdinText };
 
 export function stripOutputFlag(argv: string[]): { outputFormat: OutputFormat; args: string[] } {
   const next: string[] = [];

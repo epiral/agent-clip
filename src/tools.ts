@@ -1,12 +1,15 @@
-import { invoke, hubListClips } from '@pinixai/core';
+import { hubInvoke, hubListClips } from '@pinixai/core';
 import { Database } from 'bun:sqlite';
 import { parseChain, Operator } from './chain';
 import {
   type Config,
+  addInstalledClip,
   configDelete,
   configSet,
   configToText,
+  getHubUrl,
   loadConfig,
+  removeInstalledClip,
 } from './config';
 import {
   countTopicRuns,
@@ -19,20 +22,11 @@ import {
   renameTopic,
 } from './db';
 import { registerEventCommands } from './events';
-import {
-  humanSize,
-  pinixDataURLPrefix,
-  registerFSCommands,
-  resolvePath,
-  resolvePathToRelative,
-} from './fs';
 import { type ToolCall, type ToolDef } from './llm';
-import { deleteFact, formatSearchResults, listFacts, searchMemory, storeFact } from './memory';
+import { formatSearchResults, searchMemory } from './memory';
 import { isImageFile } from './media';
 import { attachmentToURL, extractThinking, extractUserContent } from './sanitize';
-import { createSkill, deleteSkill, listSkills, loadSkill, updateSkill } from './skills';
-import { parseOptionalLineCountArgs, parsePositiveInt, safeJSONParse, toErrorMessage } from './shared';
-import { registerBrowserCommands } from './browser';
+import { parsePositiveInt, safeJSONParse, toErrorMessage } from './shared';
 
 type CommandHandler = (args: string[], stdin: string) => Promise<string> | string;
 type RegisterFn = (name: string, description: string, handler: CommandHandler) => void;
@@ -147,73 +141,6 @@ export class Registry {
         .map(([name, description]) => `  ${name} — ${description}`)
         .join('\n');
     });
-
-    this.register('grep', 'Filter lines matching a pattern (supports -i, -v, -c)', (args, stdin) => {
-      if (args.length === 0) {
-        throw new Error('usage: grep [-i] [-v] [-c] <pattern>');
-      }
-
-      let ignoreCase = false;
-      let invert = false;
-      let countOnly = false;
-      let pattern = '';
-      for (const arg of args) {
-        switch (arg) {
-          case '-i':
-            ignoreCase = true;
-            break;
-          case '-v':
-            invert = true;
-            break;
-          case '-c':
-            countOnly = true;
-            break;
-          default:
-            pattern = arg;
-            break;
-        }
-      }
-
-      if (!pattern) {
-        throw new Error('pattern required');
-      }
-
-      const needle = ignoreCase ? pattern.toLowerCase() : pattern;
-      const matches = stdin.split('\n').filter((line) => {
-        const haystack = ignoreCase ? line.toLowerCase() : line;
-        const matched = haystack.includes(needle);
-        return invert ? !matched : matched;
-      });
-      return countOnly ? String(matches.length) : matches.join('\n');
-    });
-
-    this.register('head', 'Show first N lines (default 10). Usage: head 5 or head -n 5', (args, stdin) => {
-      const count = parseOptionalLineCountArgs(args, 10);
-      const lines = stdin.split('\n');
-      return (count > 0 ? lines.slice(0, count) : lines).join('\n');
-    });
-
-    this.register('tail', 'Show last N lines (default 10). Usage: tail 5 or tail -n 5', (args, stdin) => {
-      const count = parseOptionalLineCountArgs(args, 10);
-      const lines = stdin.split('\n');
-      return (count > 0 ? lines.slice(-count) : lines).join('\n');
-    });
-
-    this.register('wc', 'Count lines, words, chars (-l lines, -w words, -c chars)', (args, stdin) => {
-      const lines = stdin.split('\n').length;
-      const words = stdin.trim() ? stdin.trim().split(/\s+/).length : 0;
-      const chars = stdin.length;
-      switch (args[0]) {
-        case '-l':
-          return String(lines);
-        case '-w':
-          return String(words);
-        case '-c':
-          return String(chars);
-        default:
-          return `${lines} lines, ${words} words, ${chars} chars`;
-      }
-    });
   }
 }
 
@@ -292,14 +219,12 @@ export function runToolDef(commands: Record<string, string>): ToolDef {
 
 export function buildRegistry(db: Database, cfg: Config): Registry {
   const registry = new Registry();
-  registerFSCommands(registry.register.bind(registry));
-  registerBrowserCommands(registry.register.bind(registry));
   registerMemoryCommands(registry.register.bind(registry), db, cfg);
   registerTopicCommands(registry.register.bind(registry), db, cfg);
   registerEventCommands(registry.register.bind(registry), db);
-  registerSkillCommands(registry.register.bind(registry));
   registerConfigCommands(registry.register.bind(registry));
-  registerClipCommands(registry.register.bind(registry));
+  registerPkgCommands(registry, cfg);
+  registerInstalledClipCommands(registry, cfg);
   return registry;
 }
 
@@ -312,13 +237,10 @@ function registerMemoryCommands(register: RegisterFn, db: Database, cfg: Config)
       '  memory search <query> -t <id>      — search within a specific topic',
       '  memory search <query> -k <keyword> — filter results by keyword',
       '  memory recent [n]                  — show recent conversation summaries',
-      '  memory store <note>                — store a fact/note',
-      '  memory facts                       — list all stored facts',
-      '  memory forget <id>                 — delete a fact by ID',
     ].join('\n'),
     async (args, stdin) => {
       if (args.length === 0) {
-        throw new Error('usage: memory search|recent|store|facts|forget');
+        throw new Error('usage: memory search|recent');
       }
 
       switch (args[0]) {
@@ -357,38 +279,8 @@ function registerMemoryCommands(register: RegisterFn, db: Database, cfg: Config)
           }
           return rows.map((row) => `[${formatSummaryTime(row.created_at)}] ${row.summary}`).join('\n');
         }
-        case 'store': {
-          const note = args.slice(1).join(' ') || stdin;
-          if (!note) {
-            throw new Error('usage: memory store <note>');
-          }
-          storeFact(db, note, 'general');
-          return 'fact stored';
-        }
-        case 'facts': {
-          const facts = listFacts(db);
-          if (facts.length === 0) {
-            return 'No facts stored.';
-          }
-          const showing = facts.slice(0, 50);
-          const lines = [`Facts (${showing.length} of ${facts.length}):`];
-          for (const fact of showing) {
-            lines.push(`  #${fact.id} [${fact.category}] ${fact.content}`);
-          }
-          if (facts.length > showing.length) {
-            lines.push(`  ... ${facts.length - showing.length} more (use memory forget <id> to clean up)`);
-          }
-          return lines.join('\n');
-        }
-        case 'forget': {
-          if (!args[1]) {
-            throw new Error('usage: memory forget <id>');
-          }
-          deleteFact(db, Number.parseInt(args[1], 10));
-          return `fact ${args[1]} deleted`;
-        }
         default:
-          throw new Error(`unknown: memory ${args[0]}. Use: search|recent|store|facts|forget`);
+          throw new Error(`unknown: memory ${args[0]}. Use: search|recent`);
       }
     },
   );
@@ -531,92 +423,6 @@ function registerTopicCommands(register: RegisterFn, db: Database, cfg: Config):
   );
 }
 
-function registerSkillCommands(register: RegisterFn): void {
-  register(
-    'skill',
-    [
-      'Reusable instructions. Match task → load → execute.',
-      '  skill list                        — list available skills',
-      '  skill load <name>                 — load full instructions',
-      '  skill search <query>              — search skills by keyword',
-      '  skill create <name> --desc TEXT   — create (stdin=content)',
-      '  skill update <name> [--desc TEXT] — update (stdin=content)',
-      '  skill delete <name>               — delete a skill',
-    ].join('\n'),
-    async (args, stdin) => {
-      if (args.length === 0) {
-        throw new Error('usage: skill list|load|search|create|update|delete');
-      }
-
-      switch (args[0]) {
-        case 'list': {
-          const skills = await listSkills();
-          if (skills.length === 0) {
-            return 'No skills. Use `skill create` to add one.';
-          }
-          return [
-            `Skills (${skills.length}):`,
-            ...skills.map((skill) => `  ${skill.name.padEnd(20, ' ')} ${skill.description}`),
-          ].join('\n');
-        }
-        case 'load': {
-          if (!args[1]) {
-            throw new Error('usage: skill load <name>');
-          }
-          const skill = loadSkill(args[1]);
-          return `<skill name=${JSON.stringify(args[1])}>\n${skill.description ? `> ${skill.description}\n\n` : ''}${skill.body}\n</skill>`;
-        }
-        case 'search': {
-          const query = args.slice(1).join(' ').trim().toLowerCase();
-          if (!query) {
-            throw new Error('usage: skill search <query>');
-          }
-          const matches = (await listSkills()).filter((skill) => {
-            return skill.name.toLowerCase().includes(query) || skill.description.toLowerCase().includes(query);
-          });
-          if (matches.length === 0) {
-            return `No skills matching ${JSON.stringify(args.slice(1).join(' '))}.`;
-          }
-          return [
-            `Matches (${matches.length}):`,
-            ...matches.map((skill) => `  ${skill.name.padEnd(20, ' ')} ${skill.description}`),
-          ].join('\n');
-        }
-        case 'create': {
-          if (!args[1]) {
-            throw new Error('usage: skill create <name> --desc TEXT');
-          }
-          if (!stdin.trim()) {
-            throw new Error('stdin content is required for skill create');
-          }
-          createSkill(args[1], extractDesc(args.slice(2)), stdin);
-          return `created skill ${args[1]}`;
-        }
-        case 'update': {
-          if (!args[1]) {
-            throw new Error('usage: skill update <name> [--desc TEXT]');
-          }
-          updateSkill(
-            args[1],
-            hasDesc(args.slice(2)) ? extractDesc(args.slice(2)) : undefined,
-            stdin.trim() ? stdin : undefined,
-          );
-          return `updated skill ${args[1]}`;
-        }
-        case 'delete': {
-          if (!args[1]) {
-            throw new Error('usage: skill delete <name>');
-          }
-          deleteSkill(args[1]);
-          return `deleted skill ${args[1]}`;
-        }
-        default:
-          throw new Error(`unknown: skill ${args[0]}. Use: list|load|search|create|update|delete`);
-      }
-    },
-  );
-}
-
 function registerConfigCommands(register: RegisterFn): void {
   register(
     'config',
@@ -655,69 +461,266 @@ function registerConfigCommands(register: RegisterFn): void {
   );
 }
 
-function registerClipCommands(register: RegisterFn): void {
-  register(
-    'clip',
+function registerPkgCommands(registry: Registry, cfg: Config): void {
+  registry.register(
+    'pkg',
     [
-      'Operate external clips (services, tools, environments).',
-      '  clip list                              — list all clips from Hub',
-      '  clip <name> <command> [args...]        — invoke a command',
-      '  clip <name> pull <remote-path> [name]  — pull file from clip to local',
-      '  clip <name> push <local-path> <remote> — push local file to clip',
+      'Manage installed packages (Clips).',
+      '  pkg list                          — list installed packages',
+      '  pkg search <query>                — search all connected Hubs',
+      '  pkg add <name> [--hub <hub>]      — install a Clip',
+      '  pkg remove <name>                 — uninstall a Clip',
+      '  pkg info <name>                   — show Clip commands and schema',
     ].join('\n'),
-    async (args, stdin) => {
-      if (args.length === 0 || (args.length === 1 && args[0] === 'list')) {
-        return clipList();
+    async (args) => {
+      if (args.length === 0 || args[0] === 'list') {
+        return pkgList(cfg);
       }
 
-      const name = args[0];
-      const command = args[1];
-      if (!command) {
-        return clipInfo(name);
+      switch (args[0]) {
+        case 'search':
+          return pkgSearch(cfg, args.slice(1));
+        case 'add':
+          return pkgAdd(registry, cfg, args.slice(1));
+        case 'remove':
+          return pkgRemove(args.slice(1));
+        case 'info':
+          return pkgInfo(cfg, args.slice(1));
+        default:
+          throw new Error(`unknown: pkg ${args[0]}. Use: list|search|add|remove|info`);
       }
-      if (command === 'pull') {
-        return clipPull(name, args.slice(2));
-      }
-      if (command === 'push') {
-        return clipPush(name, args.slice(2));
-      }
-      return clipInvoke(name, command, args.slice(2), stdin);
     },
   );
 }
 
-async function clipInvoke(clipName: string, command: string, args: string[], stdin: string): Promise<string> {
-  const input = buildClipInvokeInput(args, stdin);
+function pkgList(cfg: Config): string {
+  const entries = Object.entries(cfg.installed);
+  if (entries.length === 0) {
+    return 'No packages installed. Use `pkg search` to find packages, then `pkg add <name>` to install.';
+  }
 
-  // If there are bare positional args (no --flags), the input is likely wrong.
-  // Show usage hint from the command's schema.
-  const hasFlags = args.some((a) => a.startsWith('--'));
-  const hasPositionals = args.some((a) => !a.startsWith('--'));
-  if (hasPositionals && !hasFlags && !stdin.trim()) {
-    const hint = await getCommandUsageHint(clipName, command);
-    if (hint) {
-      throw new Error(`${hint}\n\nExample: clip ${clipName} ${command} ${hint.includes('--') ? hint.split('\n')[0].replace(/^usage: clip \S+ \S+ /, '') : ''}`);
+  const lines = [`Installed packages (${entries.length}):`];
+  for (const [alias, info] of entries) {
+    lines.push(`  ${alias}  (hub: ${info.hub})`);
+  }
+  return lines.join('\n');
+}
+
+async function pkgSearch(cfg: Config, args: string[]): Promise<string> {
+  const query = args.join(' ').trim().toLowerCase();
+
+  if (cfg.hubs.length === 0) {
+    return 'No Hubs connected. Add a Hub first: config set hubs.0.url <url>';
+  }
+
+  const allResults: string[] = [];
+  for (const hub of cfg.hubs) {
+    try {
+      const clips = await hubListClips(hub.url);
+      const filtered = query
+        ? clips.filter((c) => {
+            const searchable = [c.name, c.domain, ...c.commands.map((cmd) => cmd.name), ...c.commands.map((cmd) => cmd.description)].join(' ').toLowerCase();
+            return searchable.includes(query);
+          })
+        : clips;
+
+      if (filtered.length > 0) {
+        allResults.push(`[${hub.name}] ${filtered.length} clip(s):`);
+        for (const clip of filtered) {
+          const cmds = clip.commands.map((c) => c.name).join(', ');
+          const installed = cfg.installed[clip.name] ? ' (installed)' : '';
+          allResults.push(`  ${clip.name}${cmds ? ` — ${cmds}` : ''}${installed}`);
+        }
+      }
+    } catch (err) {
+      allResults.push(`[${hub.name}] error: ${toErrorMessage(err)}`);
     }
   }
 
-  try {
-    const result = await invoke(clipName, command, input);
-    if (typeof result === 'string') {
-      return result;
+  if (allResults.length === 0) {
+    return query ? `No clips matching "${query}".` : 'No clips found on any Hub.';
+  }
+
+  return allResults.join('\n');
+}
+
+async function pkgAdd(registry: Registry, cfg: Config, args: string[]): Promise<string> {
+  if (args.length === 0) {
+    throw new Error('usage: pkg add <name> [--hub <hub-name>]');
+  }
+
+  const name = args[0];
+  let hubName = '';
+
+  for (let i = 1; i < args.length; i += 1) {
+    if (args[i] === '--hub' && args[i + 1]) {
+      hubName = args[i + 1];
+      i += 1;
     }
-    return JSON.stringify(result, null, 2);
-  } catch (error) {
-    const hint = await getCommandUsageHint(clipName, command);
-    if (hint) {
-      throw new Error(`${toErrorMessage(error)}\n\n${hint}`);
+  }
+
+  if (cfg.installed[name]) {
+    return `"${name}" is already installed (hub: ${cfg.installed[name].hub}).`;
+  }
+
+  // If hub not specified, find the clip on any connected hub
+  if (!hubName) {
+    for (const hub of cfg.hubs) {
+      try {
+        const clips = await hubListClips(hub.url);
+        if (clips.find((c) => c.name === name)) {
+          hubName = hub.name;
+          break;
+        }
+      } catch {
+        // skip unreachable hubs
+      }
     }
-    throw error;
+  }
+
+  if (!hubName) {
+    if (cfg.hubs.length === 0) {
+      throw new Error('No Hubs connected. Add a Hub first.');
+    }
+    throw new Error(`Clip "${name}" not found on any connected Hub.`);
+  }
+
+  // Verify the hub name exists in config
+  const hub = cfg.hubs.find((h) => h.name === hubName);
+  if (!hub) {
+    throw new Error(`Hub "${hubName}" not found in config.`);
+  }
+
+  addInstalledClip(name, hubName);
+  cfg.installed[name] = { hub: hubName };
+  registerSingleClipCommand(registry, cfg, name, hub.url);
+  return `Installed "${name}" from hub "${hubName}". It is now available as a command.`;
+}
+
+function pkgRemove(args: string[]): string {
+  if (args.length === 0) {
+    throw new Error('usage: pkg remove <name>');
+  }
+  const name = args[0];
+  removeInstalledClip(name);
+  return `Removed "${name}".`;
+}
+
+async function pkgInfo(cfg: Config, args: string[]): Promise<string> {
+  if (args.length === 0) {
+    throw new Error('usage: pkg info <name>');
+  }
+
+  const name = args[0];
+  const entry = cfg.installed[name];
+
+  // Try to find info from the hub
+  let clipInfo: Awaited<ReturnType<typeof hubListClips>>[number] | undefined;
+
+  if (entry) {
+    const hubUrl = getHubUrl(cfg, entry.hub);
+    if (hubUrl) {
+      try {
+        const clips = await hubListClips(hubUrl);
+        clipInfo = clips.find((c) => c.name === name);
+      } catch {
+        // hub unreachable
+      }
+    }
+  } else {
+    // Search all hubs
+    for (const hub of cfg.hubs) {
+      try {
+        const clips = await hubListClips(hub.url);
+        clipInfo = clips.find((c) => c.name === name);
+        if (clipInfo) break;
+      } catch {
+        // skip
+      }
+    }
+  }
+
+  const lines = [`Package: ${name}`];
+  if (entry) {
+    lines.push(`Status: installed (hub: ${entry.hub})`);
+  } else {
+    lines.push('Status: not installed');
+  }
+
+  if (clipInfo) {
+    if (clipInfo.domain) lines.push(`Domain: ${clipInfo.domain}`);
+    if (clipInfo.commands.length > 0) {
+      lines.push('', 'Commands:');
+      for (const cmd of clipInfo.commands) {
+        lines.push(`  ${cmd.name}${cmd.description ? ` — ${cmd.description}` : ''}`);
+        const schema = cmd.input ? safeJSONParse<{ properties?: Record<string, { type?: string; description?: string; enum?: string[] }>; required?: string[] }>(cmd.input) : null;
+        if (schema?.properties) {
+          const required = new Set(schema.required ?? []);
+          for (const [key, prop] of Object.entries(schema.properties)) {
+            const req = required.has(key) ? ' (required)' : '';
+            const enumVals = prop.enum ? ` [${prop.enum.join('|')}]` : '';
+            lines.push(`    --${key} <${prop.type || 'value'}>${enumVals}${req}${prop.description ? ` ${prop.description}` : ''}`);
+          }
+        }
+      }
+    }
+  } else {
+    lines.push('(no info available — Hub unreachable or clip not found)');
+  }
+
+  return lines.join('\n');
+}
+
+/**
+ * Register installed clips as top-level commands.
+ * Each installed clip's alias becomes a command name.
+ * Subcommands are forwarded to the Hub via hubInvoke().
+ */
+function registerInstalledClipCommands(registry: Registry, cfg: Config): void {
+  for (const [alias, clipInfo] of Object.entries(cfg.installed)) {
+    const hubUrl = getHubUrl(cfg, clipInfo.hub);
+    if (!hubUrl) {
+      continue;
+    }
+    registerSingleClipCommand(registry, cfg, alias, hubUrl);
   }
 }
 
-async function getCommandUsageHint(clipName: string, command: string): Promise<string | null> {
+function registerSingleClipCommand(registry: Registry, cfg: Config, alias: string, hubUrl: string): void {
+  const clipInfo = cfg.installed[alias];
+  const hubLabel = clipInfo?.hub ?? 'unknown';
+  registry.register(
+    alias,
+    `Installed package (hub: ${hubLabel}). Run "${alias} <command> [--param value]" or just "${alias}" for info.`,
+    async (args, stdin) => {
+      if (args.length === 0 || args[0] === '--help' || args[0] === '-h') {
+        return pkgInfo(cfg, [alias]);
+      }
+
+      const command = args[0];
+      const input = buildClipInvokeInput(args.slice(1), stdin);
+
+      try {
+        const result = await hubInvoke(alias, command, input, clipInfo?.token, hubUrl);
+        if (typeof result === 'string') {
+          return result;
+        }
+        return JSON.stringify(result, null, 2);
+      } catch (error) {
+        // Try to give a usage hint
+        const hint = await getCommandUsageHint(alias, command, hubUrl);
+        if (hint) {
+          throw new Error(`${toErrorMessage(error)}\n\n${hint}`);
+        }
+        throw error;
+      }
+    },
+  );
+}
+
+async function getCommandUsageHint(clipName: string, command: string, hubUrl: string): Promise<string | null> {
   try {
-    const clips = await hubListClips();
+    const clips = await hubListClips(hubUrl);
     const clip = clips.find((c) => c.name === clipName);
     const cmd = clip?.commands.find((c) => c.name === command);
     if (!cmd?.input) return null;
@@ -736,95 +739,10 @@ async function getCommandUsageHint(clipName: string, command: string): Promise<s
         parts.push(`[--${key} <${prop.type || 'value'}>${enumVals}${desc}]`);
       }
     }
-    return `usage: clip ${clipName} ${command} ${parts.join(' ')}`;
+    return `usage: ${clipName} ${command} ${parts.join(' ')}`;
   } catch {
     return null;
   }
-}
-
-async function clipPull(clipName: string, args: string[]): Promise<string> {
-  if (!args[0]) {
-    throw new Error(`usage: clip ${clipName} pull <remote-path> [local-name]`);
-  }
-
-  const remotePath = args[0];
-  const localName = args[1] ?? remotePath.split('/').pop() ?? remotePath;
-  const result = await invoke(clipName, 'read', { args: [remotePath], stdin: '' });
-  const data = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
-  await Bun.write(resolvePath(localName), data);
-
-  let output = `Pulled ${clipName}:${remotePath} -> ${localName} (${humanSize(Buffer.byteLength(data))})`;
-  if (isImageFile(localName)) {
-    output += `\nRender: ![image](${pinixDataURLPrefix}${resolvePathToRelative(localName)})`;
-  }
-  return output;
-}
-
-async function clipPush(clipName: string, args: string[]): Promise<string> {
-  if (!args[0] || !args[1]) {
-    throw new Error(`usage: clip ${clipName} push <local-path> <remote-path>`);
-  }
-
-  const bytes = await Bun.file(resolvePath(args[0])).bytes();
-  const base64 = Buffer.from(bytes).toString('base64');
-  await invoke(clipName, 'write', { args: ['-b', args[1]], stdin: base64 });
-  return `Pushed ${args[0]} -> ${clipName}:${args[1]} (${humanSize(bytes.byteLength)})`;
-}
-
-async function clipList(): Promise<string> {
-  let hubClips: Awaited<ReturnType<typeof hubListClips>> = [];
-  try {
-    hubClips = await hubListClips();
-  } catch (err) {
-    return `[error] cannot reach Hub: ${toErrorMessage(err)}`;
-  }
-
-  if (hubClips.length === 0) {
-    return 'No clips on Hub.';
-  }
-
-  const lines: string[] = [];
-  for (const clip of hubClips) {
-    const cmds = clip.commands.map((c: { name: string }) => c.name).join(', ');
-    lines.push(`  ${clip.name}${cmds ? ` — ${cmds}` : ''}`);
-  }
-  return lines.join('\n');
-}
-
-async function clipInfo(clipName: string): Promise<string> {
-  let hubClips: Awaited<ReturnType<typeof hubListClips>> = [];
-  try {
-    hubClips = await hubListClips();
-  } catch {}
-
-  const info = hubClips.find((c) => c.name === clipName);
-  const lines = [`Clip: ${clipName}`];
-
-  if (info) {
-    if (info.domain) lines.push(`Domain: ${info.domain}`);
-    if (info.commands.length > 0) {
-      lines.push('', 'Commands:');
-      for (const cmd of info.commands) {
-        lines.push(`  ${cmd.name}${cmd.description ? ` — ${cmd.description}` : ''}`);
-        const schema = cmd.input ? safeJSONParse<{ properties?: Record<string, { type?: string; description?: string; enum?: string[] }>; required?: string[] }>(cmd.input) : null;
-        if (schema?.properties) {
-          const required = new Set(schema.required ?? []);
-          for (const [key, prop] of Object.entries(schema.properties)) {
-            const req = required.has(key) ? ' (required)' : '';
-            const enumVals = prop.enum ? ` [${prop.enum.join('|')}]` : '';
-            lines.push(`    --${key} <${prop.type || 'value'}>${enumVals}${req}${prop.description ? ` ${prop.description}` : ''}`);
-          }
-        }
-      }
-    }
-  } else {
-    lines.push('(not found on Hub)');
-  }
-
-  lines.push('', 'File transfer:');
-  lines.push(`  clip ${clipName} pull <remote-path> [local-name]`);
-  lines.push(`  clip ${clipName} push <local-path> <remote-path>`);
-  return lines.join('\n');
 }
 
 function buildClipInvokeInput(args: string[], stdin: string): unknown {
@@ -887,18 +805,6 @@ function parseScalar(value: string): unknown {
   }
 
   return value;
-}
-
-function extractDesc(args: string[]): string {
-  const index = args.indexOf('--desc');
-  if (index < 0) {
-    return '';
-  }
-  return args[index + 1] ?? '';
-}
-
-function hasDesc(args: string[]): boolean {
-  return args.includes('--desc');
 }
 
 function formatSummaryTime(unix: number): string {

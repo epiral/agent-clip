@@ -78,28 +78,3 @@ export function parsePositiveInt(value: string): number {
   return parsed;
 }
 
-export function parseOptionalLineCountArgs(args: string[], defaultValue: number): number {
-  let count = defaultValue;
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index];
-    if (arg === "-n") {
-      const next = args[index + 1];
-      if (!next) {
-        throw new Error("missing value for -n");
-      }
-      count = parsePositiveInt(next);
-      index += 1;
-      continue;
-    }
-
-    const cleaned = arg.replace(/^-+/, "");
-    const parsed = Number.parseInt(cleaned, 10);
-    if (Number.isFinite(parsed)) {
-      if (parsed <= 0) {
-        throw new Error(`line count must be positive: ${JSON.stringify(arg)}`);
-      }
-      count = parsed;
-    }
-  }
-  return count;
-}

@@ -13,36 +13,36 @@ export function ToolCallBlock({ name, argumentsText, result, isStreaming }: Tool
   const isDone = result !== undefined || (!isStreaming && result === undefined);
 
   return (
-    <details className="mb-4 group border border-border bg-surface" open={!isDone}>
-      <summary className="list-none cursor-pointer flex items-center gap-3 p-3 hover:bg-surface-hover transition-colors">
-        <div className="flex shrink-0 items-center justify-center w-5 h-5 border border-ink">
+    <details className="mb-2 group rounded-md border border-border bg-card overflow-hidden" open={!isDone}>
+      <summary className="list-none cursor-pointer flex items-center gap-3 px-3.5 py-2.5 hover:bg-accent transition-colors">
+        <div className="flex shrink-0 items-center justify-center w-5 h-5 rounded-sm border border-border">
           {!isDone ? (
-            <Loader2 className="h-3 w-3 animate-spin text-ink" />
+            <Loader2 className="h-3 w-3 animate-spin text-primary" />
           ) : (
-            <Check className="h-3 w-3 text-ink" strokeWidth={4} />
+            <Check className="h-3 w-3 text-success" strokeWidth={3} />
           )}
         </div>
-        <div className="flex-1 min-w-0">
-          <span className="font-mono text-[11px] font-bold text-ink uppercase tracking-wider flex items-center gap-2">
-            <Wrench className="w-3 h-3" />
+        <div className="flex-1 min-w-0 flex items-center gap-2">
+          <Wrench className="w-3 h-3 text-muted-foreground shrink-0" />
+          <span className="font-mono text-[11px] font-semibold text-foreground truncate">
             {name}
           </span>
         </div>
-        <span className="text-[8px] transition-transform group-open:rotate-90">▶</span>
+        <span className="text-[9px] text-muted-foreground/50 transition-transform group-open:rotate-90">▶</span>
       </summary>
-      
-      <div className="p-4 border-t border-border bg-paper space-y-4">
-        <div className="space-y-1">
-          <span className="signature-label text-[8px] text-muted">{t("INPUT_PARAMETERS")}</span>
-          <pre className="font-mono text-[11px] p-3 border border-border bg-surface overflow-x-auto whitespace-pre-wrap leading-relaxed">
+
+      <div className="px-3.5 py-3 border-t border-border bg-background space-y-3">
+        <div className="space-y-1.5">
+          <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">{t("INPUT_PARAMETERS")}</span>
+          <pre className="font-mono text-[11px] p-3 rounded-sm border border-border bg-card overflow-x-auto whitespace-pre-wrap leading-relaxed">
             {argumentsText}
           </pre>
         </div>
-        
+
         {result && (
-          <div className="space-y-1">
-            <span className="signature-label text-[8px] text-muted">{t("EXECUTION_RESULT")}</span>
-            <pre className="font-mono text-[11px] p-3 border border-border bg-surface overflow-x-auto whitespace-pre-wrap max-h-80 overflow-y-auto leading-relaxed">
+          <div className="space-y-1.5">
+            <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">{t("EXECUTION_RESULT")}</span>
+            <pre className="font-mono text-[11px] p-3 rounded-sm border border-border bg-card overflow-x-auto whitespace-pre-wrap max-h-80 overflow-y-auto leading-relaxed">
               {result}
             </pre>
           </div>

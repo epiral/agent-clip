@@ -30,14 +30,6 @@ export function runDir(runId: string): string {
   return dataRoot("runs", runId);
 }
 
-export function skillsDir(): string {
-  return dataRoot("skills");
-}
-
-export function skillPath(name: string): string {
-  return join(skillsDir(), `${name}.md`);
-}
-
 export function configPath(): string {
   return dataRoot("config.yaml");
 }

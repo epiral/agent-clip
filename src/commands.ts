@@ -26,7 +26,6 @@ import { runLoop } from "./loop";
 import { processMemory } from "./memory";
 import { createAsyncFileOutput, createJSONLChunkOutput, createOutput, type Output } from "./output";
 import { getRunController, registerRunController, unregisterRunController } from "./run-control";
-import { createSkill, deleteSkill, ensureSkillsDir, listSkills, loadSkill, updateSkill } from "./skills";
 import { nowUnix, toErrorMessage, truncateRunes } from "./shared";
 import { buildRegistry, toWebMessage, type WebMessage } from "./tools";
 import { appendAttachments, readImageAttachments, uploadFile, type UploadInput } from "./upload";
@@ -42,12 +41,6 @@ import {
   resolvePositionalOrField,
   resolveSendInput,
 } from "./args";
-
-interface SkillPayload {
-  name: string;
-  description: string;
-  content: string;
-}
 
 interface RunExecution {
   runId: string;
@@ -92,7 +85,6 @@ export function formatLegacyHelp(name: string, domain: string): string {
     "  bun run index.ts get-run <run-id>",
     "  bun run index.ts cancel-run <run-id>",
     "  bun run index.ts config [subcommand]",
-    "  bun run index.ts skill [subcommand]",
     "  bun run index.ts upload < stdin.json",
     "  bun run index.ts event-check [--limit 10]",
     "",
@@ -119,8 +111,6 @@ export class AgentClipCommands {
         return await this.runCancelRun(input);
       case "config":
         return await this.runConfig(input);
-      case "skill":
-        return await this.runSkill(input);
       case "upload":
         return await this.runUpload(input);
       default:
@@ -144,8 +134,6 @@ export class AgentClipCommands {
         return await this.runCancelRunCLI(args, outputFormat);
       case "config":
         return await this.runConfigCLI(args, outputFormat);
-      case "skill":
-        return await this.runSkillCLI(args, outputFormat);
       case "upload":
         return await this.runUploadCLI(args, outputFormat);
       default:
@@ -262,12 +250,6 @@ export class AgentClipCommands {
     return 0;
   }
 
-  private async runSkillCLI(args: string[], outputFormat: OutputFormat): Promise<number> {
-    const out = createOutput(outputFormat);
-    out.result(await this.runSkill({ args, stdin: readStdinText() }));
-    return 0;
-  }
-
   private async runUploadCLI(args: string[], outputFormat: OutputFormat): Promise<number> {
     if (args.length > 0) {
       throw new Error("upload reads JSON from stdin only");
@@ -355,7 +337,6 @@ export class AgentClipCommands {
 
     try {
       await withCurrentTopic(execution.topicId, async () => {
-        ensureSkillsDir();
         ensureTopicDir(execution.topicId);
         setCurrentTopic(execution.topicId);
 
@@ -512,54 +493,6 @@ export class AgentClipCommands {
       }
       default:
         throw new Error(`unknown subcommand: ${args[0]}`);
-    }
-  }
-
-  private async runSkill(input: InvocationInput): Promise<unknown> {
-    ensureSkillsDir();
-    const args = readArgs(input);
-
-    if (args.length === 0 || args[0] === "list") {
-      return await listSkills();
-    }
-
-    switch (args[0]) {
-      case "get": {
-        const skillName = args[1];
-        if (!skillName) {
-          throw new Error("usage: skill get <name>");
-        }
-        const skill = loadSkill(skillName);
-        return {
-          name: skillName,
-          description: skill.description,
-          content: skill.body,
-        };
-      }
-      case "save": {
-        const raw = readStdin(input);
-        const payload = JSON.parse(raw) as SkillPayload;
-        if (!payload.name) {
-          throw new Error("name is required");
-        }
-        try {
-          loadSkill(payload.name);
-          updateSkill(payload.name, payload.description, payload.content);
-        } catch {
-          createSkill(payload.name, payload.description, payload.content);
-        }
-        return { status: "ok", name: payload.name };
-      }
-      case "delete": {
-        const skillName = args[1];
-        if (!skillName) {
-          throw new Error("usage: skill delete <name>");
-        }
-        deleteSkill(skillName);
-        return { status: "ok" };
-      }
-      default:
-        throw new Error(`unknown: skill ${args[0]}`);
     }
   }
 

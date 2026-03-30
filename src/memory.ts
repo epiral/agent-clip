@@ -1,6 +1,5 @@
 import { Database } from "bun:sqlite";
 import type { Config } from "./config";
-import { getEmbeddingProvider } from "./config";
 import { hasVec } from "./db";
 import { callLLM, textMessage, type Message } from "./llm";
 import { nowUnix, truncateRunes } from "./shared";
@@ -22,43 +21,10 @@ export interface SearchFilter {
   limit?: number;
 }
 
-export interface Fact {
-  id: number;
-  content: string;
-  category: string;
-  created_at: number;
-}
-
-export async function getEmbedding(cfg: Config, text: string): Promise<number[]> {
-  const provider = getEmbeddingProvider(cfg);
-  if (!provider || !provider.base_url || !provider.api_key || !cfg.embedding_model) {
-    return [];
-  }
-
-  const response = await fetch(`${provider.base_url}/embeddings`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${provider.api_key}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: cfg.embedding_model,
-      input: [text],
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`embedding error ${response.status}: ${await response.text()}`);
-  }
-
-  const payload = await response.json() as {
-    data?: Array<{ embedding?: number[] }>;
-  };
-  const embedding = payload.data?.[0]?.embedding;
-  if (!embedding) {
-    throw new Error("no embedding returned");
-  }
-  return embedding;
+export async function getEmbedding(_cfg: Config, _text: string): Promise<number[]> {
+  // Embedding provider has been removed from config.
+  // RAG embedding may be re-added via a dedicated Memory Clip in the future.
+  return [];
 }
 
 export function encodeEmbedding(values: number[]): Uint8Array {
@@ -368,18 +334,6 @@ export async function generateSummary(db: Database, cfg: Config, newMessages: Me
   return response.content.trim();
 }
 
-export function storeFact(db: Database, content: string, category = "general"): void {
-  db.query("INSERT INTO facts (content, category, created_at) VALUES (?, ?, ?)").run(content, category, nowUnix());
-}
-
-export function listFacts(db: Database): Fact[] {
-  return db.query<Fact, []>("SELECT id, content, category, created_at FROM facts ORDER BY created_at DESC").all();
-}
-
-export function deleteFact(db: Database, id: number): void {
-  db.query("DELETE FROM facts WHERE id = ?").run(id);
-}
-
 export async function processMemory(db: Database, cfg: Config, topicId: string, runId: string, newMessages: Message[]): Promise<void> {
   const userMessage = newMessages.find((message) => message.role === "user" && message.content)?.content ?? "";
   const summary = await generateSummary(db, cfg, newMessages).catch(() => truncateRunes(userMessage, 100));
@@ -388,5 +342,5 @@ export async function processMemory(db: Database, cfg: Config, topicId: string, 
   }
 
   const embedding = await getEmbedding(cfg, summary).catch(() => []);
-  storeSummary(db, topicId, runId, summary, userMessage, embedding, cfg.embedding_model);
+  storeSummary(db, topicId, runId, summary, userMessage, embedding, "");
 }

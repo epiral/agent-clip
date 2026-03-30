@@ -13,6 +13,16 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      '@pinixai/core/web': path.resolve(__dirname, './node_modules/@pinixai/core/src/web.ts'),
+    },
+  },
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:9007',
+        changeOrigin: true,
+        rewrite: (p) => `/clips/agent${p}`,
+      },
     },
   },
 })

@@ -4,27 +4,27 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const buttonVariants = cva(
-  "group/button inline-flex shrink-0 items-center justify-center border border-transparent text-sm font-bold whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 active:scale-[0.98]",
+  "group/button inline-flex shrink-0 items-center justify-center rounded-md border border-transparent text-sm font-semibold whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 active:scale-[0.98]",
   {
     variants: {
       variant: {
-        default: "bg-ink text-paper hover:bg-ink/90",
+        default: "bg-primary text-primary-foreground hover:bg-primary/90",
         outline:
-          "border-ink text-ink hover:bg-ink hover:text-paper",
+          "border-border text-foreground hover:bg-accent hover:text-accent-foreground",
         secondary:
-          "bg-surface border-border text-ink hover:bg-surface-hover",
+          "bg-secondary border-border text-secondary-foreground hover:bg-accent",
         ghost:
-          "hover:bg-surface-hover hover:text-ink",
+          "hover:bg-accent hover:text-accent-foreground",
         destructive:
-          "border-urgent text-urgent hover:bg-urgent hover:text-paper",
-        link: "text-ink underline-offset-4 hover:underline",
+          "border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground",
+        link: "text-foreground underline-offset-4 hover:underline",
       },
       size: {
         default:
-          "h-10 gap-2 px-4 signature-label",
-        xs: "h-7 gap-1 px-2 text-[9px] uppercase tracking-wider",
-        sm: "h-8 gap-1.5 px-3 text-[10px] uppercase tracking-widest",
-        lg: "h-12 gap-2 px-6 text-base signature-label",
+          "h-10 gap-2 px-4 text-sm",
+        xs: "h-7 gap-1 px-2 text-xs",
+        sm: "h-8 gap-1.5 px-3 text-xs",
+        lg: "h-12 gap-2 px-6 text-base",
         icon: "size-10",
         "icon-xs": "size-7",
         "icon-sm": "size-8",
