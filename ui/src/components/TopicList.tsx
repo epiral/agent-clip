@@ -31,10 +31,10 @@ export function TopicList({
   const { t } = useI18n();
 
   return (
-    <div className="flex flex-col h-full w-full bg-paper overflow-hidden border-r border-border">
+    <div className="flex flex-col h-full w-full bg-background overflow-hidden border-r border-border">
       <div className="p-3 border-b border-border flex-shrink-0" style={{ WebkitAppRegion: "drag" } as any}>
         <button
-          className="ink-button w-full flex items-center justify-center gap-2 h-9"
+          className="bg-primary text-primary-foreground text-xs font-semibold uppercase tracking-wider px-4 py-2 rounded-md hover:bg-primary/90 active:bg-primary/80 transition-colors disabled:opacity-40 w-full flex items-center justify-center gap-2 h-9"
           onClick={() => {
             onSelectTopic(null);
             onCloseMobileNav?.();
@@ -60,27 +60,27 @@ export function TopicList({
                 }}
                 className={`
                   group relative flex items-center gap-2.5 w-full text-left px-3 py-2.5 rounded-md transition-colors
-                  ${isActive ? "bg-surface" : "hover:bg-surface-hover"}
+                  ${isActive ? "bg-card" : "hover:bg-accent"}
                 `}
               >
-                <MessageSquare className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-ink' : 'text-muted'}`} />
+                <MessageSquare className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-foreground' : 'text-muted-foreground'}`} />
 
                 <div className="flex flex-col min-w-0 flex-1 gap-0.5">
-                  <span className={`text-[13px] leading-tight truncate ${isActive ? 'font-semibold text-ink' : 'font-medium text-foreground/80'}`}>
+                  <span className={`text-[13px] leading-tight truncate ${isActive ? 'font-semibold text-foreground' : 'font-medium text-foreground/80'}`}>
                     {topic.name}
                   </span>
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] text-muted">
+                    <span className="text-[10px] text-muted-foreground">
                       {formatRelativeTime(ts)}
                     </span>
-                    <span className="text-[10px] text-muted/50">
+                    <span className="text-[10px] text-muted-foreground/50">
                       {topic.message_count} msgs
                     </span>
                   </div>
                 </div>
 
                 {topic.has_active_run && (
-                  <span className="w-1.5 h-1.5 bg-active rounded-full shrink-0 animate-pulse" />
+                  <span className="w-1.5 h-1.5 bg-primary rounded-full shrink-0 animate-pulse" />
                 )}
               </button>
             );
@@ -88,9 +88,9 @@ export function TopicList({
         </div>
       </div>
 
-      <div className="p-3 border-t border-border bg-paper">
+      <div className="p-3 border-t border-border bg-background">
         <button
-          className="outline-button flex items-center justify-center gap-2 w-full h-9"
+          className="border border-primary text-primary text-xs font-semibold uppercase tracking-wider px-4 py-2 rounded-md hover:bg-primary hover:text-primary-foreground transition-all disabled:opacity-40 flex items-center justify-center gap-2 w-full h-9"
           onClick={onOpenConfig}
         >
           <Settings className="w-3.5 h-3.5" />

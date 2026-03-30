@@ -5,7 +5,7 @@ import { Button } from "./ui/button";
 import { getConfig, setConfig, deleteConfig, type AgentConfig } from "../lib/agent";
 import { useI18n } from "../lib/i18n";
 import { ScrollArea } from "./ui/scroll-area";
-import { Trash2, Plus, Globe } from "lucide-react";
+import { Trash2, Plus, Globe, Package } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface SettingsPanelProps {
@@ -85,53 +85,56 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-md p-0 flex flex-col bg-paper border-l border-border">
-        <SheetHeader className="px-6 py-8 border-b border-border bg-surface">
-          <SheetTitle className="text-3xl font-serif">{t("Settings")}</SheetTitle>
-          <SheetDescription className="signature-label text-muted mt-2">
+      <SheetContent side="right" className="w-full sm:max-w-md p-0 flex flex-col bg-background border-l border-border">
+        <SheetHeader className="px-4 py-5 border-b border-border">
+          <SheetTitle className="text-lg font-medium text-foreground tracking-normal normal-case">
+            {t("Settings")}
+          </SheetTitle>
+          <SheetDescription className="text-xs text-muted-foreground mt-0.5 normal-case tracking-normal font-normal">
             {t("Configure your agent's core parameters")}
           </SheetDescription>
         </SheetHeader>
 
         <ScrollArea className="flex-1">
-          <div className="p-6 space-y-12 pb-24">
+          <div className="p-4 space-y-6 pb-24">
             {error && (
-              <div className="p-4 border border-urgent/20 bg-urgent/5 text-urgent text-[11px] font-mono uppercase tracking-widest text-center">
+              <div className="p-3 rounded-md border border-destructive/20 bg-destructive/10 text-destructive text-sm">
                 {error}
               </div>
             )}
 
+            {/* Language */}
             <Section title={t("Language")}>
               <select
                 value={locale}
                 onChange={(e) => setLocale(e.target.value as any)}
-                className="flex h-10 w-full border border-border bg-surface px-3 py-2 text-sm transition-colors focus:outline-none focus:border-ink appearance-none cursor-pointer"
+                className="flex h-10 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 appearance-none cursor-pointer"
               >
                 <option value="en">English</option>
                 <option value="zh-CN">简体中文</option>
               </select>
             </Section>
 
+            {/* Identity */}
             <Section title={t("Identity")}>
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <label className="signature-label text-muted font-mono">{t("Agent Name")}</label>
-                  <SettingInput
-                    value={config.name}
-                    onSave={(v) => handleSet("name", v)}
-                  />
-                </div>
+              <div className="space-y-2">
+                <label className="text-sm text-muted-foreground">{t("Agent Name")}</label>
+                <SettingInput
+                  value={config.name}
+                  onSave={(v) => handleSet("name", v)}
+                />
               </div>
             </Section>
 
+            {/* Language Model */}
             <Section title={t("Language Model")}>
-              <div className="space-y-6">
+              <div className="space-y-4">
                 <div className="space-y-2">
-                  <label className="signature-label text-muted font-mono">{t("LLM Provider")}</label>
+                  <label className="text-sm text-muted-foreground">{t("LLM Provider")}</label>
                   <select
                     value={config.llm_provider}
                     onChange={(e) => handleSet("llm_provider", e.target.value)}
-                    className="flex h-10 w-full border border-border bg-surface px-3 py-2 text-sm transition-colors focus:outline-none focus:border-ink appearance-none cursor-pointer"
+                    className="flex h-10 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 appearance-none cursor-pointer"
                   >
                     <option value="">--</option>
                     {providerNames.map(p => <option key={p} value={p}>{p}</option>)}
@@ -139,7 +142,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="signature-label text-muted font-mono">{t("LLM Model")}</label>
+                  <label className="text-sm text-muted-foreground">{t("LLM Model")}</label>
                   <SettingInput
                     value={config.llm_model}
                     onSave={(v) => handleSet("llm_model", v)}
@@ -149,74 +152,114 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
               </div>
             </Section>
 
+            {/* Providers */}
             <Section title={t("Providers")} action={
-              <button onClick={() => setShowAddProvider(!showAddProvider)} className="text-ink hover:opacity-70 transition-opacity">
+              <button
+                onClick={() => setShowAddProvider(!showAddProvider)}
+                className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              >
                 <Plus className="h-4 w-4" />
               </button>
             }>
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {showAddProvider && (
-                  <div className="p-4 border border-border bg-surface space-y-4">
-                    <Input placeholder="name (e.g. deepseek)" value={newProviderName} onChange={e => setNewProviderName(e.target.value)} className="h-9 font-mono text-xs" />
-                    <Input placeholder="https://api.example.com/v1" value={newProviderUrl} onChange={e => setNewProviderUrl(e.target.value)} className="h-9 font-mono text-xs" />
-                    <select
-                      value={newProviderProtocol}
-                      onChange={e => setNewProviderProtocol(e.target.value)}
-                      className="flex h-9 w-full border border-border bg-paper px-3 text-xs transition-colors focus:outline-none focus:border-ink appearance-none cursor-pointer"
+                  <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+                    <div className="space-y-2">
+                      <label className="text-sm text-muted-foreground">Name</label>
+                      <Input
+                        placeholder="e.g. deepseek"
+                        value={newProviderName}
+                        onChange={e => setNewProviderName(e.target.value)}
+                        className="h-9 font-mono text-xs bg-background"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm text-muted-foreground">Base URL</label>
+                      <Input
+                        placeholder="https://api.example.com/v1"
+                        value={newProviderUrl}
+                        onChange={e => setNewProviderUrl(e.target.value)}
+                        className="h-9 font-mono text-xs bg-background"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm text-muted-foreground">Protocol</label>
+                      <select
+                        value={newProviderProtocol}
+                        onChange={e => setNewProviderProtocol(e.target.value)}
+                        className="flex h-9 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 appearance-none cursor-pointer"
+                      >
+                        <option value="openai">OpenAI</option>
+                        <option value="anthropic">Anthropic</option>
+                      </select>
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={handleAddProvider}
+                      disabled={!newProviderName.trim() || !newProviderUrl.trim()}
+                      className="w-full h-9 mt-1"
                     >
-                      <option value="openai">OpenAI</option>
-                      <option value="anthropic">Anthropic</option>
-                    </select>
-                    <Button size="sm" onClick={handleAddProvider} disabled={!newProviderName.trim() || !newProviderUrl.trim()} className="w-full h-9">Add Provider</Button>
+                      Add Provider
+                    </Button>
                   </div>
                 )}
 
-                <div className="space-y-3">
-                  {providerNames.map(name => (
-                    <div key={name} className="p-4 border border-border bg-surface space-y-4">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[12px] font-bold text-ink uppercase tracking-wider">{name}</span>
-                        <button onClick={() => handleDeleteProvider(name)} className="text-muted hover:text-urgent transition-colors">
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
+                {providerNames.map(name => (
+                  <div key={name} className="rounded-lg border border-border bg-card overflow-hidden">
+                    {/* Provider header */}
+                    <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/50">
+                      <span className="text-sm font-medium text-foreground">{name}</span>
+                      <button
+                        onClick={() => handleDeleteProvider(name)}
+                        className="p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    {/* Provider fields */}
+                    <div className="p-4 space-y-3">
+                      <div className="space-y-1.5">
+                        <label className="text-xs text-muted-foreground">URL</label>
+                        <SettingInput value={config.providers[name].base_url} onSave={v => handleSet(`providers.${name}.base_url`, v)} mono small />
                       </div>
-                      <div className="space-y-3">
-                        <FieldRow label="URL">
-                          <SettingInput value={config.providers[name].base_url} onSave={v => handleSet(`providers.${name}.base_url`, v)} mono small />
-                        </FieldRow>
-                        <FieldRow label="Key">
-                          <SettingInput value={config.providers[name].api_key} onSave={v => handleSet(`providers.${name}.api_key`, v)} mono small password />
-                        </FieldRow>
-                        <FieldRow label="Protocol">
-                          <select
-                            value={config.providers[name].protocol || "openai"}
-                            onChange={e => handleSet(`providers.${name}.protocol`, e.target.value)}
-                            className="flex h-8 w-full border border-border bg-paper px-3 text-[11px] transition-colors focus:outline-none focus:border-ink appearance-none cursor-pointer"
-                          >
-                            <option value="openai">OpenAI</option>
-                            <option value="anthropic">Anthropic</option>
-                          </select>
-                        </FieldRow>
+                      <div className="space-y-1.5">
+                        <label className="text-xs text-muted-foreground">API Key</label>
+                        <SettingInput value={config.providers[name].api_key} onSave={v => handleSet(`providers.${name}.api_key`, v)} mono small password />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs text-muted-foreground">Protocol</label>
+                        <select
+                          value={config.providers[name].protocol || "openai"}
+                          onChange={e => handleSet(`providers.${name}.protocol`, e.target.value)}
+                          className="flex h-8 w-full rounded-md border border-border bg-background px-3 text-xs text-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 appearance-none cursor-pointer"
+                        >
+                          <option value="openai">OpenAI</option>
+                          <option value="anthropic">Anthropic</option>
+                        </select>
                       </div>
                     </div>
-                  ))}
-                </div>
+                  </div>
+                ))}
               </div>
             </Section>
 
+            {/* Hubs */}
             <Section title={t("Hubs")}>
               <div className="space-y-2">
                 {!config.hubs || config.hubs.length === 0 ? (
-                  <div className="py-8 text-center border border-dashed border-border">
-                    <p className="signature-label text-muted/40">{t("No hubs connected")}</p>
+                  <div className="py-8 text-center rounded-md border border-dashed border-border">
+                    <p className="text-sm text-muted-foreground">{t("No hubs connected")}</p>
                   </div>
                 ) : (
                   config.hubs.map((hub, i) => (
-                    <div key={i} className="flex items-center gap-3 p-3 border border-border bg-surface">
-                      <Globe className="w-3.5 h-3.5 text-muted shrink-0" />
+                    <div key={i} className="flex items-center gap-3 p-3 rounded-md border border-border bg-card">
+                      <div className="relative shrink-0">
+                        <Globe className="w-4 h-4 text-muted-foreground" />
+                        <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-success border-2 border-card" />
+                      </div>
                       <div className="flex-1 min-w-0">
-                        <span className="text-[12px] font-bold text-ink uppercase tracking-wider">{hub.name}</span>
-                        <span className="block text-[11px] font-mono text-muted truncate">{hub.url}</span>
+                        <span className="text-sm font-medium text-foreground">{hub.name}</span>
+                        <span className="block text-xs font-mono text-muted-foreground truncate">{hub.url}</span>
                       </div>
                     </div>
                   ))
@@ -224,18 +267,20 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
               </div>
             </Section>
 
+            {/* Installed Packages */}
             <Section title={t("Installed Packages")}>
               <div className="space-y-2">
                 {!config.installed || Object.keys(config.installed).length === 0 ? (
-                  <div className="py-8 text-center border border-dashed border-border">
-                    <p className="signature-label text-muted/40">{t("No packages installed")}</p>
+                  <div className="py-8 text-center rounded-md border border-dashed border-border">
+                    <p className="text-sm text-muted-foreground">{t("No packages installed")}</p>
                   </div>
                 ) : (
                   Object.entries(config.installed).map(([alias, info]) => (
-                    <div key={alias} className="flex items-center justify-between p-3 border border-border bg-surface">
-                      <div className="min-w-0">
-                        <span className="text-[12px] font-mono font-bold text-ink">{alias}</span>
-                        <span className="block text-[10px] font-mono text-muted uppercase tracking-wider">{info.hub}</span>
+                    <div key={alias} className="flex items-center gap-3 p-3 rounded-md border border-border bg-card">
+                      <Package className="w-4 h-4 text-muted-foreground shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm font-medium font-mono text-foreground">{alias}</span>
+                        <span className="block text-xs text-muted-foreground truncate">{info.hub}</span>
                       </div>
                     </div>
                   ))
@@ -243,19 +288,21 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
               </div>
             </Section>
 
+            {/* System Prompt */}
             <Section title={t("System Prompt")}>
               <textarea
                 defaultValue={config.system_prompt}
                 onBlur={(e) => handleSet("system_prompt", e.target.value)}
-                className="w-full min-h-[200px] border border-border bg-surface p-4 text-sm font-serif italic leading-relaxed focus:outline-none focus:border-ink resize-none"
+                className="w-full min-h-[200px] rounded-md border border-border bg-background p-3 text-sm font-mono leading-relaxed text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 resize-y"
                 placeholder={t("Instructions for the agent...")}
               />
             </Section>
 
-            <section className="pt-8 border-t border-border">
+            {/* Danger zone */}
+            <section className="pt-6 border-t border-border">
               <Button
-                variant="destructive"
-                className="w-full"
+                variant="outline"
+                className="w-full text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
                 onClick={async () => {
                   if (confirm(t("Are you sure? This will reset all settings."))) {
                     try {
@@ -273,9 +320,10 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
           </div>
         </ScrollArea>
 
-        <div className="p-6 border-t border-border bg-surface mt-auto">
+        {/* Footer */}
+        <div className="p-4 border-t border-border bg-card mt-auto">
           <Button
-            className="w-full h-12"
+            className="w-full h-11 bg-primary text-primary-foreground hover:bg-primary/90"
             onClick={() => onOpenChange(false)}
             disabled={saving}
           >
@@ -289,21 +337,12 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
 
 function Section({ title, children, action }: { title: string; children: React.ReactNode; action?: React.ReactNode }) {
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-xs font-serif font-bold uppercase tracking-[0.2em] text-ink">{title}</h3>
+        <h3 className="text-sm font-medium text-foreground">{title}</h3>
         {action}
       </div>
       {children}
-    </div>
-  );
-}
-
-function FieldRow({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex items-center gap-4">
-      <span className="signature-label text-muted font-mono w-16 shrink-0">{label}</span>
-      <div className="flex-1">{children}</div>
     </div>
   );
 }
@@ -335,9 +374,9 @@ function SettingInput({
       onKeyDown={(e) => { if (e.key === "Enter") { e.currentTarget.blur(); } }}
       placeholder={placeholder}
       className={cn(
-        "bg-surface focus-visible:border-ink",
+        "bg-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
         mono && "font-mono",
-        small && "h-8 text-[11px] px-3 bg-paper"
+        small && "h-8 text-xs px-3"
       )}
     />
   );

@@ -114,7 +114,7 @@ export function ChatComposer({ onSend, onCancel, isStreaming, agentName }: ChatC
 
   return (
     <div
-      className={`flex flex-col transition-colors ${isDragging ? 'bg-active/5' : ''}`}
+      className={`flex flex-col transition-colors ${isDragging ? 'bg-primary/5' : ''}`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -133,7 +133,7 @@ export function ChatComposer({ onSend, onCancel, isStreaming, agentName }: ChatC
               <button
                 type="button"
                 onClick={() => removeAttachment(i)}
-                className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-ink text-paper rounded-full flex items-center justify-center opacity-0 group-hover/thumb:opacity-100 transition-opacity shadow-sm"
+                className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-foreground text-background rounded-full flex items-center justify-center opacity-0 group-hover/thumb:opacity-100 transition-opacity shadow-sm"
               >
                 <X className="h-3 w-3" />
               </button>
@@ -146,7 +146,7 @@ export function ChatComposer({ onSend, onCancel, isStreaming, agentName }: ChatC
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
-          className="p-2 rounded-md text-muted hover:text-ink hover:bg-surface-hover transition-colors"
+          className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
           disabled={isStreaming}
         >
           <Paperclip className="h-4.5 w-4.5" />
@@ -170,7 +170,7 @@ export function ChatComposer({ onSend, onCancel, isStreaming, agentName }: ChatC
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
           placeholder={t("Ask {name} anything...", { name: agentName || "Agent" })}
-          className="flex-1 min-h-[40px] max-h-[240px] resize-none border-none bg-transparent focus:ring-0 focus:outline-none px-2 py-2 text-[16px] md:text-sm leading-relaxed placeholder:text-muted/50 no-scrollbar"
+          className="flex-1 min-h-[40px] max-h-[240px] resize-none border-none bg-transparent focus:ring-0 focus:outline-none px-2 py-2 text-[16px] md:text-sm leading-relaxed placeholder:text-muted-foreground/50 no-scrollbar"
           rows={1}
         />
 
@@ -178,7 +178,7 @@ export function ChatComposer({ onSend, onCancel, isStreaming, agentName }: ChatC
           {isStreaming ? (
             <button
               onClick={onCancel}
-              className="p-2 rounded-md text-urgent hover:bg-urgent/10 transition-colors"
+              className="p-2 rounded-md text-destructive hover:bg-destructive/10 transition-colors"
             >
               <Square className="h-4 w-4 fill-current" />
             </button>
@@ -186,7 +186,7 @@ export function ChatComposer({ onSend, onCancel, isStreaming, agentName }: ChatC
             <button
               onClick={handleSend}
               disabled={!hasContent}
-              className="ink-button h-9 w-9 p-0 flex items-center justify-center rounded-lg"
+              className="bg-primary text-primary-foreground text-xs font-semibold uppercase tracking-wider px-4 py-2 rounded-md hover:bg-primary/90 active:bg-primary/80 transition-colors disabled:opacity-40 h-9 w-9 p-0 flex items-center justify-center rounded-lg"
             >
               <ArrowUp className="h-4.5 w-4.5" />
             </button>
