@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { Clip, command, handler, serveIPC, z } from "@pinixai/core";
+import { Clip, command, handler, serveIPC, serveHTTP, z } from "@pinixai/core";
 import { InvocationSchema, stripOutputFlag } from "./src/args";
 import { AgentClipCommands, formatLegacyHelp } from "./src/commands";
 import { ensureConfigExists } from "./src/config";
@@ -67,6 +67,12 @@ class AgentClip extends Clip {
 
     if (!first || first === "--ipc") {
       await serveIPC(this);
+      return;
+    }
+
+    if (first === "--web") {
+      const port = argv[1] ? parseInt(argv[1]) : 3000;
+      await serveHTTP(this, port);
       return;
     }
 
