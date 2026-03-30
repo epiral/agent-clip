@@ -8,7 +8,7 @@
     "typecheck": "/Users/cp/.bun/bin/tsc --noEmit"
   },
   "dependencies": {
-    "@pinixai/core": "^0.8.0",
+    "@pinixai/core": "^0.9.0",
     "sqlite-vec": "^0.1.7",
     "yaml": "^2.8.1"
   },

@@ -5,7 +5,7 @@
     "": {
       "name": "clip-agent",
       "dependencies": {
-        "@pinixai/core": "^0.8.0",
+        "@pinixai/core": "^0.9.0",
         "sqlite-vec": "^0.1.7",
         "yaml": "^2.8.1",
       },
@@ -26,7 +26,7 @@
 
     "@modelcontextprotocol/sdk": ["@modelcontextprotocol/sdk@1.28.0", "https://registry.npmmirror.com/@modelcontextprotocol/sdk/-/sdk-1.28.0.tgz", { "dependencies": { "@hono/node-server": "^1.19.9", "ajv": "^8.17.1", "ajv-formats": "^3.0.1", "content-type": "^1.0.5", "cors": "^2.8.5", "cross-spawn": "^7.0.5", "eventsource": "^3.0.2", "eventsource-parser": "^3.0.0", "express": "^5.2.1", "express-rate-limit": "^8.2.1", "hono": "^4.11.4", "jose": "^6.1.3", "json-schema-typed": "^8.0.2", "pkce-challenge": "^5.0.0", "raw-body": "^3.0.0", "zod": "^3.25 || ^4.0", "zod-to-json-schema": "^3.25.1" }, "peerDependencies": { "@cfworker/json-schema": "^4.1.1" }, "optionalPeers": ["@cfworker/json-schema"] }, "sha512-gmloF+i+flI8ouQK7MWW4mOwuMh4RePBuPFAEPC6+pdqyWOUMDOixb6qZ69owLJpz6XmyllCouc4t8YWO+E2Nw=="],
 
-    "@pinixai/core": ["@pinixai/core@0.8.0", "https://registry.npmmirror.com/@pinixai/core/-/core-0.8.0.tgz", { "dependencies": { "@bufbuild/protobuf": "^2.11.0", "@connectrpc/connect": "^2.1.1", "@connectrpc/connect-web": "^2.1.1", "@modelcontextprotocol/sdk": "^1.27.1", "zod": "^4.3.6" }, "peerDependencies": { "typescript": "^5.9.3" } }, "sha512-smtjwCwwDgw7drGzdHk9cahQ6z3TkOYfZOLEd9RmYoidTVNR7Vot/FHGa7AuZcIH5r04288dTz9iwTlXdmivOA=="],
+    "@pinixai/core": ["@pinixai/core@0.9.0", "", { "dependencies": { "@bufbuild/protobuf": "^2.11.0", "@connectrpc/connect": "^2.1.1", "@connectrpc/connect-web": "^2.1.1", "@modelcontextprotocol/sdk": "^1.27.1", "zod": "^4.3.6" }, "peerDependencies": { "typescript": "^5.9.3" } }, "sha512-frXR33u+6ZplcLo7QnLqZ+dK/Ci3NeJktYkkqsTNomd6+bYL94HbfWdsIMJ5HZEgEveMtr+EHB1/+Hlr4lcI0Q=="],
 
     "@types/bun": ["@types/bun@1.3.11", "https://registry.npmmirror.com/@types/bun/-/bun-1.3.11.tgz", { "dependencies": { "bun-types": "1.3.11" } }, "sha512-5vPne5QvtpjGpsGYXiFyycfpDF2ECyPcTSsFBMa0fraoxiQyMJ3SmuQIGhzPg2WJuWxVBoxWJ2kClYTcw/4fAg=="],
 
