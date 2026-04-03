@@ -664,14 +664,21 @@ function buildClipInvokeInput(args: string[], stdin: string): unknown {
 
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
-    if (!arg.startsWith('--')) {
+
+    let key: string | null = null;
+    if (arg.startsWith('--')) {
+      key = arg.slice(2);
+    } else if (arg.startsWith('-') && arg.length > 1 && !/^-\d/.test(arg)) {
+      key = arg.slice(1);
+    }
+
+    if (!key) {
       positionals.push(arg);
       continue;
     }
 
-    const key = arg.slice(2);
     const next = args[index + 1];
-    if (!next || next.startsWith('--')) {
+    if (!next || next.startsWith('-')) {
       flags[key] = true;
       continue;
     }
