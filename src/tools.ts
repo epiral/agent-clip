@@ -1,9 +1,8 @@
-import { hubInvoke, hubListClips } from '@pinixai/core';
+import { listClips, invokeClip, type RuntimeClipInfo } from '@pinixai/core';
 import { Database } from 'bun:sqlite';
 import { parseChain, Operator } from './chain';
 import {
   type Config,
-  type HubConfig,
   addInstalledClip,
   configDelete,
   configSet,
@@ -467,10 +466,10 @@ function registerPkgCommands(registry: Registry, cfg: Config): void {
     [
       'Manage installed packages (Clips).',
       '  pkg list                          — list installed packages',
-      '  pkg search <query>                — search all connected Hubs',
-      '  pkg add <name> [--hub <hub>]      — install a Clip',
+      '  pkg search <query>                — search available clips',
+      '  pkg add <name>                    — install a Clip',
       '  pkg remove <name>                 — uninstall a Clip',
-      '  pkg info <name>                   — show Clip commands and schema',
+      '  pkg info <name>                   — show Clip commands',
     ].join('\n'),
     async (args) => {
       if (args.length === 0 || args[0] === 'list') {
@@ -509,92 +508,54 @@ function pkgList(cfg: Config): string {
 async function pkgSearch(cfg: Config, args: string[]): Promise<string> {
   const query = args.join(' ').trim().toLowerCase();
 
-  if (cfg.hubs.length === 0) {
-    return 'No Hubs connected. Add a Hub first: config set hubs.0.url <url>';
-  }
+  try {
+    const clips = await listClips();
+    const filtered = query
+      ? clips.filter((c) => {
+          const searchable = [c.name, c.package, ...c.commands.map((cmd) => cmd.name), ...c.commands.map((cmd) => cmd.description ?? '')].join(' ').toLowerCase();
+          return searchable.includes(query);
+        })
+      : clips;
 
-  const allResults: string[] = [];
-  for (const hub of cfg.hubs) {
-    try {
-      const clips = await hubListClips(hub.url, hub.token);
-      const filtered = query
-        ? clips.filter((c) => {
-            const searchable = [c.name, c.domain, ...c.commands.map((cmd) => cmd.name), ...c.commands.map((cmd) => cmd.description)].join(' ').toLowerCase();
-            return searchable.includes(query);
-          })
-        : clips;
-
-      if (filtered.length > 0) {
-        allResults.push(`[${hub.name}] ${filtered.length} clip(s):`);
-        for (const clip of filtered) {
-          const cmds = clip.commands.map((c) => c.name).join(', ');
-          const installed = cfg.installed[clip.name] ? ' (installed)' : '';
-          allResults.push(`  ${clip.name}${cmds ? ` — ${cmds}` : ''}${installed}`);
-        }
-      }
-    } catch (err) {
-      allResults.push(`[${hub.name}] error: ${toErrorMessage(err)}`);
+    if (filtered.length === 0) {
+      return query ? `No clips matching "${query}".` : 'No clips found.';
     }
-  }
 
-  if (allResults.length === 0) {
-    return query ? `No clips matching "${query}".` : 'No clips found on any Hub.';
+    const lines = [`${filtered.length} clip(s):`];
+    for (const clip of filtered) {
+      const cmds = clip.commands.map((c) => c.name).join(', ');
+      const installed = cfg.installed[clip.name] ? ' (installed)' : '';
+      lines.push(`  ${clip.name}${cmds ? ` — ${cmds}` : ''}${installed}`);
+    }
+    return lines.join('\n');
+  } catch (err) {
+    return `error: ${toErrorMessage(err)}`;
   }
-
-  return allResults.join('\n');
 }
 
 async function pkgAdd(registry: Registry, cfg: Config, args: string[]): Promise<string> {
   if (args.length === 0) {
-    throw new Error('usage: pkg add <name> [--hub <hub-name>]');
+    throw new Error('usage: pkg add <name>');
   }
 
   const name = args[0];
-  let hubName = '';
-
-  for (let i = 1; i < args.length; i += 1) {
-    if (args[i] === '--hub' && args[i + 1]) {
-      hubName = args[i + 1];
-      i += 1;
-    }
-  }
 
   if (cfg.installed[name]) {
     return `"${name}" is already installed (hub: ${cfg.installed[name].hub}).`;
   }
 
-  // If hub not specified, find the clip on any connected hub
-  if (!hubName) {
-    for (const hub of cfg.hubs) {
-      try {
-        const clips = await hubListClips(hub.url, hub.token);
-        if (clips.find((c) => c.name === name)) {
-          hubName = hub.name;
-          break;
-        }
-      } catch {
-        // skip unreachable hubs
-      }
-    }
+  // Verify the clip exists via IPC
+  const clips = await listClips();
+  const found = clips.find((c) => c.name === name);
+  if (!found) {
+    throw new Error(`Clip "${name}" not found.`);
   }
 
-  if (!hubName) {
-    if (cfg.hubs.length === 0) {
-      throw new Error('No Hubs connected. Add a Hub first.');
-    }
-    throw new Error(`Clip "${name}" not found on any connected Hub.`);
-  }
-
-  // Verify the hub name exists in config
-  const hub = cfg.hubs.find((h) => h.name === hubName);
-  if (!hub) {
-    throw new Error(`Hub "${hubName}" not found in config.`);
-  }
-
+  const hubName = 'local';
   addInstalledClip(name, hubName);
   cfg.installed[name] = { hub: hubName };
-  registerSingleClipCommand(registry, cfg, name, hub);
-  return `Installed "${name}" from hub "${hubName}". It is now available as a command.`;
+  registerSingleClipCommand(registry, cfg, name);
+  return `Installed "${name}". It is now available as a command.`;
 }
 
 function pkgRemove(args: string[]): string {
@@ -614,30 +575,13 @@ async function pkgInfo(cfg: Config, args: string[]): Promise<string> {
   const name = args[0];
   const entry = cfg.installed[name];
 
-  // Try to find info from the hub
-  let clipInfo: Awaited<ReturnType<typeof hubListClips>>[number] | undefined;
-
-  if (entry) {
-    const hubCfg = cfg.hubs.find((h) => h.name === entry.hub);
-    if (hubCfg) {
-      try {
-        const clips = await hubListClips(hubCfg.url, hubCfg.token);
-        clipInfo = clips.find((c) => c.name === name);
-      } catch {
-        // hub unreachable
-      }
-    }
-  } else {
-    // Search all hubs
-    for (const hub of cfg.hubs) {
-      try {
-        const clips = await hubListClips(hub.url, hub.token);
-        clipInfo = clips.find((c) => c.name === name);
-        if (clipInfo) break;
-      } catch {
-        // skip
-      }
-    }
+  // Find clip info via IPC
+  let clipInfo: RuntimeClipInfo | undefined;
+  try {
+    const clips = await listClips();
+    clipInfo = clips.find((c) => c.name === name);
+  } catch {
+    // IPC unavailable
   }
 
   const lines = [`Package: ${name}`];
@@ -648,24 +592,16 @@ async function pkgInfo(cfg: Config, args: string[]): Promise<string> {
   }
 
   if (clipInfo) {
-    if (clipInfo.domain) lines.push(`Domain: ${clipInfo.domain}`);
+    if (clipInfo.package) lines.push(`Package: ${clipInfo.package}`);
+    if (clipInfo.version) lines.push(`Version: ${clipInfo.version}`);
     if (clipInfo.commands.length > 0) {
       lines.push('', 'Commands:');
       for (const cmd of clipInfo.commands) {
         lines.push(`  ${cmd.name}${cmd.description ? ` — ${cmd.description}` : ''}`);
-        const schema = cmd.input ? safeJSONParse<{ properties?: Record<string, { type?: string; description?: string; enum?: string[] }>; required?: string[] }>(cmd.input) : null;
-        if (schema?.properties) {
-          const required = new Set(schema.required ?? []);
-          for (const [key, prop] of Object.entries(schema.properties)) {
-            const req = required.has(key) ? ' (required)' : '';
-            const enumVals = prop.enum ? ` [${prop.enum.join('|')}]` : '';
-            lines.push(`    --${key} <${prop.type || 'value'}>${enumVals}${req}${prop.description ? ` ${prop.description}` : ''}`);
-          }
-        }
       }
     }
   } else {
-    lines.push('(no info available — Hub unreachable or clip not found)');
+    lines.push('(no info available — clip not found)');
   }
 
   return lines.join('\n');
@@ -674,19 +610,15 @@ async function pkgInfo(cfg: Config, args: string[]): Promise<string> {
 /**
  * Register installed clips as top-level commands.
  * Each installed clip's alias becomes a command name.
- * Subcommands are forwarded to the Hub via hubInvoke().
+ * Subcommands are forwarded via IPC invokeClip().
  */
 function registerInstalledClipCommands(registry: Registry, cfg: Config): void {
-  for (const [alias, clipInfo] of Object.entries(cfg.installed)) {
-    const hubCfg = cfg.hubs.find((h) => h.name === clipInfo.hub);
-    if (!hubCfg) {
-      continue;
-    }
-    registerSingleClipCommand(registry, cfg, alias, hubCfg);
+  for (const alias of Object.keys(cfg.installed)) {
+    registerSingleClipCommand(registry, cfg, alias);
   }
 }
 
-function registerSingleClipCommand(registry: Registry, cfg: Config, alias: string, hubCfg: HubConfig): void {
+function registerSingleClipCommand(registry: Registry, cfg: Config, alias: string): void {
   const clipInfo = cfg.installed[alias];
   const hubLabel = clipInfo?.hub ?? 'unknown';
   registry.register(
@@ -701,14 +633,14 @@ function registerSingleClipCommand(registry: Registry, cfg: Config, alias: strin
       const input = buildClipInvokeInput(args.slice(1), stdin);
 
       try {
-        const result = await hubInvoke(alias, command, input, clipInfo?.token, hubCfg.url, hubCfg.token);
+        const result = await invokeClip(alias, command, input);
         if (typeof result === 'string') {
           return result;
         }
         return JSON.stringify(result, null, 2);
       } catch (error) {
         // Try to give a usage hint
-        const hint = await getCommandUsageHint(alias, command, hubCfg);
+        const hint = await getCommandUsageHint(alias, command);
         if (hint) {
           throw new Error(`${toErrorMessage(error)}\n\n${hint}`);
         }
@@ -718,28 +650,14 @@ function registerSingleClipCommand(registry: Registry, cfg: Config, alias: strin
   );
 }
 
-async function getCommandUsageHint(clipName: string, command: string, hubCfg: HubConfig): Promise<string | null> {
+async function getCommandUsageHint(clipName: string, command: string): Promise<string | null> {
   try {
-    const clips = await hubListClips(hubCfg.url, hubCfg.token);
+    const clips = await listClips();
     const clip = clips.find((c) => c.name === clipName);
     const cmd = clip?.commands.find((c) => c.name === command);
-    if (!cmd?.input) return null;
+    if (!cmd) return null;
 
-    const schema = safeJSONParse<{ properties?: Record<string, { type?: string; description?: string; enum?: string[] }>; required?: string[] }>(cmd.input);
-    if (!schema?.properties) return null;
-
-    const parts: string[] = [];
-    const required = new Set(schema.required ?? []);
-    for (const [key, prop] of Object.entries(schema.properties)) {
-      const desc = prop.description ? ` (${prop.description})` : '';
-      const enumVals = prop.enum ? ` [${prop.enum.join('|')}]` : '';
-      if (required.has(key)) {
-        parts.push(`--${key} <${prop.type || 'value'}>${enumVals}${desc}`);
-      } else {
-        parts.push(`[--${key} <${prop.type || 'value'}>${enumVals}${desc}]`);
-      }
-    }
-    return `usage: ${clipName} ${command} ${parts.join(' ')}`;
+    return `usage: ${clipName} ${command} [--param value ...]`;
   } catch {
     return null;
   }
