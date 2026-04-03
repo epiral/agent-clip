@@ -594,6 +594,20 @@ async function pkgInfo(args: string[]): Promise<string> {
       lines.push('', 'Commands:');
       for (const cmd of clipInfo.commands ?? []) {
         lines.push(`  ${cmd.name}${cmd.description ? ` — ${cmd.description}` : ''}`);
+        if (cmd.input) {
+          try {
+            const schema = JSON.parse(cmd.input);
+            const props = schema.properties || {};
+            const required = new Set(schema.required || []);
+            const params = Object.entries(props).map(([k, v]: [string, any]) => {
+              const req = required.has(k) ? '' : '?';
+              const type = v.type || 'any';
+              const desc = v.description ? ` (${v.description})` : '';
+              return `      --${k}${req}: ${type}${desc}`;
+            });
+            if (params.length > 0) lines.push(...params);
+          } catch {}
+        }
       }
     }
   } else {
