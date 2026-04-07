@@ -184,7 +184,6 @@ async function callOpenAI(
       messages: messagesToAPI(messages),
       tools,
       stream: true,
-      max_tokens: 16384,
     }),
     signal,
   });
@@ -377,7 +376,7 @@ async function callAnthropic(
     body: JSON.stringify({
       model,
       system: converted.system,
-      max_tokens: 16384,
+      max_tokens: 65536,
       stream: true,
       messages: converted.messages,
       tools: tools.map((tool) => ({
