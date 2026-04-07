@@ -111,23 +111,7 @@ export class Registry {
   }
 
   private async execSingle(command: string, stdin: string): Promise<[string, boolean]> {
-    // Extract heredoc if present: command <<DELIM\ncontent\nDELIM
-    const heredoc = extractHeredoc(command);
-    if (heredoc) {
-      command = heredoc.command;
-      // If command ends with a --flag, heredoc is that flag's value
-      // Otherwise, heredoc goes to stdin
-      if (/--[\w][\w-]*\s*$/.test(command)) {
-        // Will be appended as an argument after tokenize
-      } else {
-        stdin = heredoc.content;
-      }
-    }
-
     const parts = tokenize(command);
-    if (heredoc && /--[\w][\w-]*\s*$/.test(heredoc.command)) {
-      parts.push(heredoc.content);
-    }
     if (parts.length === 0) {
       return ['[error] empty command', true];
     }
@@ -157,33 +141,6 @@ export class Registry {
         .join('\n');
     });
   }
-}
-
-/**
- * Extract heredoc from a command string.
- * Supports: cmd <<DELIM\ncontent\nDELIM  and  cmd <<'DELIM'\ncontent\nDELIM
- * Returns null if no heredoc is found.
- */
-function extractHeredoc(command: string): { command: string; content: string } | null {
-  const match = command.match(/^(.*?)<<\s*'?(\w+)'?\s*\n/);
-  if (!match) return null;
-
-  const prefix = match[1].trim();
-  const delimiter = match[2];
-  const afterMarker = command.slice(match[0].length);
-  const endIdx = afterMarker.indexOf(`\n${delimiter}`);
-
-  if (endIdx === -1) {
-    // Delimiter at end without trailing newline
-    if (afterMarker.endsWith(delimiter) && (afterMarker.length === delimiter.length || afterMarker[afterMarker.length - delimiter.length - 1] === '\n')) {
-      const content = afterMarker.slice(0, afterMarker.length - delimiter.length).replace(/\n$/, '');
-      return { command: prefix, content };
-    }
-    return null;
-  }
-
-  const content = afterMarker.slice(0, endIdx);
-  return { command: prefix, content };
 }
 
 export function tokenize(input: string): string[] {
@@ -228,7 +185,7 @@ export function tokenize(input: string): string[] {
 
 export function runToolDef(commands: Record<string, string>): ToolDef {
   const description = [
-    'Your ONLY tool. Execute commands via run(command="..."). Supports chaining (cmd1 && cmd2, cmd1 | cmd2) and heredoc for multi-line input (cmd <<EOF\\ncontent\\nEOF).',
+    'Your ONLY tool. Execute commands via run(command="..."). Supports chaining: cmd1 && cmd2, cmd1 | cmd2. Use stdin for multi-line input.',
     '',
     'Available commands:',
     ...Object.entries(commands)
@@ -246,7 +203,11 @@ export function runToolDef(commands: Record<string, string>): ToolDef {
         properties: {
           command: {
             type: 'string',
-            description: 'Command to execute. Use heredoc for multi-line input: cmd <<EOF\\ncontent\\nEOF',
+            description: 'Command to execute',
+          },
+          stdin: {
+            type: 'string',
+            description: 'Standard input for the command (multi-line content)',
           },
         },
         required: ['command'],
