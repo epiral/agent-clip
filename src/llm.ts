@@ -126,10 +126,10 @@ export async function callLLM(
   }
 
   if ((provider.protocol || "openai") === "anthropic") {
-    return callAnthropic(provider, cfg.llm_model, messages, tools, onToken ?? undefined, onThinking ?? undefined, signal);
+    return callAnthropic(provider, cfg.llm_model, messages, tools, onToken ?? undefined, onThinking ?? undefined, signal, cfg.max_tokens);
   }
 
-  return callOpenAI(provider, cfg.llm_model, messages, tools, onToken ?? undefined, onThinking ?? undefined, signal);
+  return callOpenAI(provider, cfg.llm_model, messages, tools, onToken ?? undefined, onThinking ?? undefined, signal, cfg.max_tokens);
 }
 
 function messagesToAPI(messages: Message[]): APIMessage[] {
@@ -172,19 +172,23 @@ async function callOpenAI(
   onToken?: (token: string) => void,
   onThinking?: (token: string) => void,
   signal?: AbortSignal,
+  maxTokens?: number,
 ): Promise<LLMResponse> {
+  const body: Record<string, unknown> = {
+    model,
+    messages: messagesToAPI(messages),
+    tools,
+    stream: true,
+  };
+  if (maxTokens) body.max_tokens = maxTokens;
+
   const response = await fetch(`${provider.base_url}/chat/completions`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${provider.api_key}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      model,
-      messages: messagesToAPI(messages),
-      tools,
-      stream: true,
-    }),
+    body: JSON.stringify(body),
     signal,
   });
 
@@ -364,6 +368,7 @@ async function callAnthropic(
   onToken?: (token: string) => void,
   onThinking?: (token: string) => void,
   signal?: AbortSignal,
+  maxTokens?: number,
 ): Promise<LLMResponse> {
   const converted = convertMessagesForAnthropic(messages);
   const response = await fetch(`${provider.base_url}/v1/messages`, {
@@ -376,7 +381,7 @@ async function callAnthropic(
     body: JSON.stringify({
       model,
       system: converted.system,
-      max_tokens: 65536,
+      max_tokens: maxTokens || 65536,
       stream: true,
       messages: converted.messages,
       tools: tools.map((tool) => ({

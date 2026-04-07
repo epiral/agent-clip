@@ -22,6 +22,7 @@ export interface Config {
   providers: Record<string, ProviderConfig>;
   llm_provider: string;
   llm_model: string;
+  max_tokens?: number;
   system_prompt: string;
 }
 
