@@ -257,6 +257,7 @@ function normalizeProviders(value: unknown): Record<string, ProviderConfig> {
       protocol: asOptionalString(provider.protocol),
       base_url: asString(provider.base_url),
       api_key: asString(provider.api_key),
+      provider: provider.provider as Record<string, unknown> | undefined,
     };
   }
   return providers;
