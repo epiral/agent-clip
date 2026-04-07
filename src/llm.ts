@@ -215,11 +215,7 @@ async function callOpenAI(
       continue;
     }
 
-    const choice = chunk.choices?.[0];
-    if (choice?.finish_reason && choice.finish_reason !== "stop" && choice.finish_reason !== "tool_calls") {
-      console.error(`[LLM] finish_reason: ${choice.finish_reason}`);
-    }
-    const delta = choice?.delta;
+    const delta = chunk.choices?.[0]?.delta;
     if (!delta) {
       continue;
     }
@@ -475,40 +471,72 @@ async function callAnthropic(
   };
 }
 
+/**
+ * Spec-compliant SSE parser following the WHATWG EventSource algorithm.
+ * Handles \r\n, \n, \r line endings and multi-line data: field accumulation.
+ */
 async function* readSSE(stream: ReadableStream<Uint8Array>): AsyncGenerator<string> {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  const dataLines: string[] = [];
+
+  function dispatch(): string | null {
+    if (dataLines.length === 0) return null;
+    const data = dataLines.join("\n");
+    dataLines.length = 0;
+    return data || null;
+  }
+
+  function processLine(line: string): string | null {
+    if (line.endsWith("\r")) line = line.slice(0, -1);
+    if (line === "") return dispatch();
+    if (line.startsWith(":")) return null;
+
+    const colonIdx = line.indexOf(":");
+    let field: string;
+    let value: string;
+    if (colonIdx === -1) {
+      field = line;
+      value = "";
+    } else {
+      field = line.slice(0, colonIdx);
+      value = line.slice(colonIdx + 1);
+      if (value.startsWith(" ")) value = value.slice(1);
+    }
+
+    if (field === "data") dataLines.push(value);
+    return null;
+  }
 
   try {
     while (true) {
       const { done, value } = await reader.read();
-      if (done) {
-        break;
-      }
+      if (done) break;
       buffer += decoder.decode(value, { stream: true });
-      let boundary = buffer.indexOf("\n\n");
-      while (boundary >= 0) {
-        const block = buffer.slice(0, boundary);
-        buffer = buffer.slice(boundary + 2);
-        for (const line of block.split(/\r?\n/)) {
-          const trimmed = line.trim();
-          if (!trimmed.startsWith("data:")) {
-            continue;
-          }
-          const data = trimmed.slice(5).trim();
-          if (data) {
-            yield data;
-          }
+
+      let lineStart = 0;
+      for (let i = 0; i < buffer.length; i++) {
+        const ch = buffer[i];
+        if (ch === "\n" || ch === "\r") {
+          const line = buffer.slice(lineStart, i);
+          if (ch === "\r" && buffer[i + 1] === "\n") i++;
+          lineStart = i + 1;
+          const event = processLine(line);
+          if (event !== null) yield event;
         }
-        boundary = buffer.indexOf("\n\n");
       }
+
+      if (lineStart > 0) buffer = buffer.slice(lineStart);
     }
 
-    const tail = buffer.trim();
-    if (tail.startsWith("data:")) {
-      yield tail.slice(5).trim();
+    // Flush remaining
+    if (buffer.length > 0) {
+      const event = processLine(buffer);
+      if (event !== null) yield event;
     }
+    const final = dispatch();
+    if (final !== null) yield final;
   } finally {
     reader.releaseLock();
   }
