@@ -115,10 +115,19 @@ export class Registry {
     const heredoc = extractHeredoc(command);
     if (heredoc) {
       command = heredoc.command;
-      stdin = heredoc.content;
+      // If command ends with a --flag, heredoc is that flag's value
+      // Otherwise, heredoc goes to stdin
+      if (/--[\w][\w-]*\s*$/.test(command)) {
+        // Will be appended as an argument after tokenize
+      } else {
+        stdin = heredoc.content;
+      }
     }
 
     const parts = tokenize(command);
+    if (heredoc && /--[\w][\w-]*\s*$/.test(heredoc.command)) {
+      parts.push(heredoc.content);
+    }
     if (parts.length === 0) {
       return ['[error] empty command', true];
     }
