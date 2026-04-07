@@ -125,11 +125,19 @@ export async function callLLM(
     throw new Error(`no api_key for llm provider ${JSON.stringify(cfg.llm_provider)}`);
   }
 
+  console.error(`[llm] request model=${cfg.llm_model} messages=${messages.length} tools=${tools.length}`);
+
+  let response: LLMResponse;
   if ((provider.protocol || "openai") === "anthropic") {
-    return callAnthropic(provider, cfg.llm_model, messages, tools, onToken ?? undefined, onThinking ?? undefined, signal, cfg.max_tokens);
+    response = await callAnthropic(provider, cfg.llm_model, messages, tools, onToken ?? undefined, onThinking ?? undefined, signal, cfg.max_tokens);
+  } else {
+    response = await callOpenAI(provider, cfg.llm_model, messages, tools, onToken ?? undefined, onThinking ?? undefined, signal, cfg.max_tokens);
   }
 
-  return callOpenAI(provider, cfg.llm_model, messages, tools, onToken ?? undefined, onThinking ?? undefined, signal, cfg.max_tokens);
+  const tcSummary = response.toolCalls.map(tc => `${tc.function.name}(${tc.function.arguments.length})`).join(", ");
+  console.error(`[llm] response content=${response.content.length} tool_calls=[${tcSummary}]`);
+
+  return response;
 }
 
 function messagesToAPI(messages: Message[]): APIMessage[] {

@@ -153,7 +153,12 @@ async function executeToolCall(registry: Registry, toolCall: ToolCall): Promise<
   if (firstToken) {
     trackClipUsage(firstToken);
   }
-  return await registry.exec(args.command, args.stdin);
+  const result = await registry.exec(args.command, args.stdin);
+  if (result.startsWith("[error]")) {
+    const stdinPreview = args.stdin ? ` stdin(${args.stdin.length})` : "";
+    console.error(`[run] error command="${args.command}"${stdinPreview}\n  ${result}`);
+  }
+  return result;
 }
 
 function parseToolArguments(toolCall: ToolCall): { command: string; stdin: string; parseError?: string } {
