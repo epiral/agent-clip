@@ -7,6 +7,7 @@ export interface ProviderConfig {
   protocol?: string;
   base_url: string;
   api_key: string;
+  provider?: Record<string, unknown>; // OpenRouter provider routing (ignore, order, etc.)
 }
 
 export interface HubConfig {

@@ -181,6 +181,7 @@ async function callOpenAI(
     stream: true,
   };
   if (maxTokens) body.max_tokens = maxTokens;
+  if (provider.provider) body.provider = provider.provider;
 
   const response = await fetch(`${provider.base_url}/chat/completions`, {
     method: "POST",
