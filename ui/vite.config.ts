@@ -21,7 +21,6 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:9007',
         changeOrigin: true,
-        rewrite: (p) => `/clips/agent${p}`,
       },
     },
   },

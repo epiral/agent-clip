@@ -1,11 +1,12 @@
 import type { Topic } from "../lib/types";
-import { Plus, Settings, MessageSquare } from "lucide-react";
+import { Plus, Settings, MessageSquare, Trash2 } from "lucide-react";
 import { useI18n } from "../lib/i18n";
 
 interface TopicListProps {
   topics: Topic[];
   currentTopicId: string | null;
   onSelectTopic: (id: string | null) => void;
+  onDeleteTopic: (id: string) => void;
   onOpenConfig: () => void;
   onCloseMobileNav?: () => void;
 }
@@ -25,6 +26,7 @@ export function TopicList({
   topics,
   currentTopicId,
   onSelectTopic,
+  onDeleteTopic,
   onOpenConfig,
   onCloseMobileNav,
 }: TopicListProps) {
@@ -82,6 +84,17 @@ export function TopicList({
                 {topic.has_active_run && (
                   <span className="w-1.5 h-1.5 bg-primary rounded-full shrink-0 animate-pulse" />
                 )}
+
+                <span
+                  role="button"
+                  className="shrink-0 p-1 rounded text-muted-foreground/0 group-hover:text-muted-foreground hover:!text-destructive hover:bg-destructive/10 transition-colors"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDeleteTopic(topic.id);
+                  }}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </span>
               </button>
             );
           })}

@@ -486,3 +486,21 @@ export function readRunOutput(runId: string): string {
 export function removeTopicFiles(topicId: string): void {
   rmSync(topicDir(topicId), { recursive: true, force: true });
 }
+
+export function deleteTopic(db: Database, topicId: string): void {
+  transaction(db, () => {
+    // Delete in dependency order
+    const runIds = db.query<{ id: string }, [string]>(
+      "SELECT id FROM runs WHERE topic_id = ?",
+    ).all(topicId);
+    for (const { id } of runIds) {
+      db.run("DELETE FROM run_inbox WHERE run_id = ?", [id]);
+    }
+    db.run("DELETE FROM runs WHERE topic_id = ?", [topicId]);
+    db.run("DELETE FROM messages WHERE topic_id = ?", [topicId]);
+    db.run("DELETE FROM summaries WHERE topic_id = ?", [topicId]);
+    db.run("DELETE FROM events WHERE topic_id = ?", [topicId]);
+    db.run("DELETE FROM topics WHERE id = ?", [topicId]);
+  });
+  removeTopicFiles(topicId);
+}

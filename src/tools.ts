@@ -624,7 +624,12 @@ async function pkgInfo(args: string[]): Promise<string> {
 async function registerAllRuntimeClipCommands(registry: Registry): Promise<void> {
   let clips: RuntimeClipInfo[] = [];
   try {
-    clips = await listClips();
+    clips = await Promise.race([
+      listClips(),
+      new Promise<RuntimeClipInfo[]>((_, reject) =>
+        setTimeout(() => reject(new Error("IPC timeout")), 3000)
+      ),
+    ]);
   } catch {
     // IPC unavailable at startup — no clips registered
     return;

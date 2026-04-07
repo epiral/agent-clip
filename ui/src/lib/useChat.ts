@@ -357,6 +357,21 @@ export function useChat() {
     };
   }, [currentTopicId, loadTopics]);
 
+  // ─── Delete topic ───
+  const removeTopic = useCallback(async (topicId: string) => {
+    try {
+      await agent.deleteTopic(topicId);
+      messageCacheRef.current.delete(topicId);
+      if (currentTopicId === topicId) {
+        setCurrentTopicId(null);
+        setMessages([]);
+      }
+      await loadTopics();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }, [currentTopicId, loadTopics]);
+
   // ─── Cancel streaming ───
   const cancel = useCallback(() => {
     streamRef.current?.cancel();
@@ -381,5 +396,6 @@ export function useChat() {
     selectTopic,
     send,
     cancel,
+    removeTopic,
   };
 }

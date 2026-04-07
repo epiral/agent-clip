@@ -9,6 +9,7 @@ import {
 import {
   createRun,
   createTopic,
+  deleteTopic,
   finishRun,
   getActiveRun,
   getActiveRunTopics,
@@ -109,6 +110,8 @@ export class AgentClipCommands {
         return await this.runGetRun(input);
       case "cancel-run":
         return await this.runCancelRun(input);
+      case "delete-topic":
+        return await this.runDeleteTopic(input);
       case "config":
         return await this.runConfig(input);
       case "upload":
@@ -345,7 +348,6 @@ export class AgentClipCommands {
       await withCurrentTopic(execution.topicId, async () => {
         ensureTopicDir(execution.topicId);
         setCurrentTopic(execution.topicId);
-
         const message = execution.attachments.length > 0
           ? appendAttachments(execution.message, execution.attachments)
           : execution.message;
@@ -471,6 +473,16 @@ export class AgentClipCommands {
 
     finishRun(db, run.id, "cancelled");
     return { id: run.id, status: "cancelled" };
+  }
+
+  private async runDeleteTopic(input: InvocationInput): Promise<Record<string, unknown>> {
+    const db = openDB();
+    const topicId = resolvePositionalOrField(input, 0, ["topic_id", "topicId"]);
+    if (!topicId) {
+      throw new Error("usage: delete-topic <topic-id>");
+    }
+    deleteTopic(db, topicId);
+    return { id: topicId, deleted: true };
   }
 
   private async runConfig(input: InvocationInput): Promise<unknown> {

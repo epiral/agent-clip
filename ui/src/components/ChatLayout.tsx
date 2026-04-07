@@ -101,6 +101,7 @@ export function ChatLayout() {
       topics={chat.topics}
       currentTopicId={chat.currentTopicId}
       onSelectTopic={chat.selectTopic}
+      onDeleteTopic={chat.removeTopic}
       onOpenConfig={() => setConfigOpen(true)}
       onCloseMobileNav={() => setMobileMenuOpen(false)}
     />

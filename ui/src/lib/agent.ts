@@ -35,6 +35,10 @@ export async function getTopicData(topicId: string): Promise<TopicResponse> {
   return invoke<TopicResponse>("get-topic", { args: [topicId] });
 }
 
+export async function deleteTopic(topicId: string): Promise<void> {
+  await invoke("delete-topic", { args: [topicId] });
+}
+
 // ─── Upload ───
 
 export interface UploadResult {

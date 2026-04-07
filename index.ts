@@ -53,6 +53,9 @@ class AgentClip extends Clip {
   @clipCommand("取消运行")
   ["cancel-run"] = handler(InvocationSchema, AnyOutputSchema, async (input) => await this.runtime.executeCommand("cancel-run", input));
 
+  @clipCommand("删除话题")
+  ["delete-topic"] = handler(InvocationSchema, AnyOutputSchema, async (input) => await this.runtime.executeCommand("delete-topic", input));
+
   @clipCommand("配置管理")
   config = handler(InvocationSchema, AnyOutputSchema, async (input) => await this.runtime.executeCommand("config", input));
 
