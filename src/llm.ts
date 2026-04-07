@@ -215,7 +215,11 @@ async function callOpenAI(
       continue;
     }
 
-    const delta = chunk.choices?.[0]?.delta;
+    const choice = chunk.choices?.[0];
+    if (choice?.finish_reason && choice.finish_reason !== "stop" && choice.finish_reason !== "tool_calls") {
+      console.error(`[LLM] finish_reason: ${choice.finish_reason}`);
+    }
+    const delta = choice?.delta;
     if (!delta) {
       continue;
     }
