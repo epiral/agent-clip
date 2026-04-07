@@ -146,7 +146,7 @@ function wrapInjectedMessage(message: string): Message {
 async function executeToolCall(registry: Registry, toolCall: ToolCall): Promise<string> {
   const args = parseToolArguments(toolCall);
   if (!args.command) {
-    return "[error] empty command";
+    return args.parseError ?? "[error] empty command";
   }
   // Track clip usage: extract the first token (clip alias) from the command
   const firstToken = args.command.trim().split(/\s+/)[0];
@@ -156,14 +156,18 @@ async function executeToolCall(registry: Registry, toolCall: ToolCall): Promise<
   return await registry.exec(args.command, args.stdin);
 }
 
-function parseToolArguments(toolCall: ToolCall): { command: string; stdin: string } {
+function parseToolArguments(toolCall: ToolCall): { command: string; stdin: string; parseError?: string } {
   let parsed: { command?: string; stdin?: string } = {};
   try {
     parsed = JSON.parse(toolCall.function.arguments || "{}") as { command?: string; stdin?: string };
   } catch (error) {
+    const raw = toolCall.function.arguments ?? "";
+    const preview = raw.length > 500 ? raw.slice(0, 500) + `... (${raw.length} chars total)` : raw;
+    console.error(`[parseToolArguments] JSON parse failed for tool call "${toolCall.function.name}"\n  error: ${error instanceof Error ? error.message : String(error)}\n  raw (${raw.length} chars): ${raw}`);
     return {
-      command: `[error] parse arguments: ${error instanceof Error ? error.message : String(error)}`,
+      command: "",
       stdin: "",
+      parseError: `[error] failed to parse tool call arguments (JSON truncated or malformed)\n${error instanceof Error ? error.message : String(error)}\nraw arguments: ${preview}`,
     };
   }
 
