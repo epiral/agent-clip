@@ -1,4 +1,5 @@
 import type { Config, ProviderConfig } from "./config";
+import { log } from "./log";
 import type { ImageData } from "./media";
 
 export interface FunctionCall {
@@ -125,7 +126,7 @@ export async function callLLM(
     throw new Error(`no api_key for llm provider ${JSON.stringify(cfg.llm_provider)}`);
   }
 
-  console.error(`[llm] request model=${cfg.llm_model} messages=${messages.length} tools=${tools.length}`);
+  log("llm.request", { model: cfg.llm_model, messages: messages.length, tools: tools.length });
 
   let response: LLMResponse;
   if ((provider.protocol || "openai") === "anthropic") {
@@ -134,8 +135,8 @@ export async function callLLM(
     response = await callOpenAI(provider, cfg.llm_model, messages, tools, onToken ?? undefined, onThinking ?? undefined, signal, cfg.max_tokens);
   }
 
-  const tcSummary = response.toolCalls.map(tc => `${tc.function.name}(${tc.function.arguments.length})`).join(", ");
-  console.error(`[llm] response content=${response.content.length} tool_calls=[${tcSummary}]`);
+  const tcSummary = response.toolCalls.map(tc => ({ name: tc.function.name, args_length: tc.function.arguments.length }));
+  log("llm.response", { content_length: response.content.length, tool_calls: tcSummary });
 
   return response;
 }

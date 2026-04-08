@@ -6,6 +6,7 @@ import type { ContextResult } from "./context";
 import { trackClipUsage } from "./context";
 import { drainInbox, tryFinishRun } from "./db";
 import { callLLM, toolResultMessage, type Message, type ToolCall } from "./llm";
+import { log, setCurrentRunId } from "./log";
 import { imageDataFromBytes, isImageFile } from "./media";
 import type { Output } from "./output";
 import { dataRoot } from "./paths";
@@ -26,6 +27,7 @@ export async function runLoop(
   out: Output,
   rc?: RunContext,
 ): Promise<Message[]> {
+  setCurrentRunId(rc?.runId ?? "");
   const context: Message[] = [{ role: "system", content: ctx.systemPrompt }, ...ctx.messages];
   const lastMessage = ctx.messages.at(-1);
   const newMessages: Message[] = lastMessage ? [lastMessage] : [];
@@ -111,9 +113,11 @@ export async function runLoop(
     context.push(assistantMessage);
     newMessages.push(assistantMessage);
     out.done();
+    setCurrentRunId("");
     return newMessages;
   }
 
+  setCurrentRunId("");
   throw new Error(`agentic loop exceeded ${maxIterations} iterations`);
 }
 
@@ -155,8 +159,7 @@ async function executeToolCall(registry: Registry, toolCall: ToolCall): Promise<
   }
   const result = await registry.exec(args.command, args.stdin);
   if (result.startsWith("[error]")) {
-    const stdinPreview = args.stdin ? ` stdin(${args.stdin.length})` : "";
-    console.error(`[run] error command="${args.command}"${stdinPreview}\n  ${result}`);
+    log("run.error", { command: args.command, stdin_length: args.stdin.length || undefined, error: result });
   }
   return result;
 }
@@ -168,7 +171,7 @@ function parseToolArguments(toolCall: ToolCall): { command: string; stdin: strin
   } catch (error) {
     const raw = toolCall.function.arguments ?? "";
     const preview = raw.length > 500 ? raw.slice(0, 500) + `... (${raw.length} chars total)` : raw;
-    console.error(`[parseToolArguments] JSON parse failed for tool call "${toolCall.function.name}"\n  error: ${error instanceof Error ? error.message : String(error)}\n  raw (${raw.length} chars): ${raw}`);
+    log("run.parse_error", { tool: toolCall.function.name, error: error instanceof Error ? error.message : String(error), raw_length: raw.length, raw_preview: preview });
     return {
       command: "",
       stdin: "",
