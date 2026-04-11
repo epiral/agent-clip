@@ -223,7 +223,15 @@ export function tokenize(input: string): string[] {
 
 export function runToolDef(commands: Record<string, string>): ToolDef {
   const description = [
-    'Your ONLY tool. Execute commands via run(command="..."). Supports chaining: cmd1 && cmd2, cmd1 | cmd2. Use stdin for multi-line input.',
+    'Your ONLY tool. Execute commands via run(command="..."). Supports chaining: cmd1 && cmd2, cmd1 | cmd2.',
+    '',
+    'Parameter types in command string:',
+    '  string:  --key value or --key "value with spaces"',
+    '  number:  --limit 10',
+    '  boolean: --flag (no value = true)',
+    '  object:  --properties {"name": "x", "tags": ["a"]}  (JSON without quotes, braces auto-matched)',
+    '  array:   --tags ["a", "b"]  (JSON array without quotes)',
+    '  multi-line text: use stdin parameter for long/multi-line content (markdown, body text, etc.)',
     '',
     'Available commands:',
     ...Object.entries(commands)
