@@ -6,7 +6,7 @@
  */
 
 import { invoke, invokeStream, type StreamEvent } from "@pinixai/core/web";
-import type { Topic, Run, SendOptions, HistoryMessage } from "./types";
+import type { Topic, Run, SendOptions, HistoryMessage, TokenUsage } from "./types";
 
 // ─── Topics ───
 
@@ -82,6 +82,7 @@ export interface SendCallbacks {
   onThinking?: (token: string) => void;
   onToolCall?: (name: string, args: string) => void;
   onToolResult?: (content: string) => void;
+  onUsage?: (usage: TokenUsage) => void;
   onDone?: () => void;
   onError?: (error: Error) => void;
 }
@@ -130,9 +131,18 @@ export function send(
   );
 }
 
+const USAGE_PREFIX = "[usage] ";
+
 function dispatchEvent(event: StreamEvent, callbacks: SendCallbacks) {
   switch (event.type) {
     case "info":
+      if (event.message.startsWith(USAGE_PREFIX)) {
+        try {
+          const usage = JSON.parse(event.message.slice(USAGE_PREFIX.length)) as TokenUsage;
+          callbacks.onUsage?.(usage);
+        } catch { /* skip malformed usage */ }
+        break;
+      }
       callbacks.onInfo?.(event.message);
       break;
     case "text":

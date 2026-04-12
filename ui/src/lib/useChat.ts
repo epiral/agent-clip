@@ -9,7 +9,7 @@
 
 import { useState, useCallback, useRef } from "react";
 import * as agent from "./agent";
-import type { Topic, ChatMessage, MessageBlock, HistoryMessage } from "./types";
+import type { Topic, ChatMessage, MessageBlock, HistoryMessage, TokenUsage } from "./types";
 
 // Collect tool results that follow an assistant message.
 function collectToolResults(history: HistoryMessage[], assistantIdx: number): string[] {
@@ -83,6 +83,9 @@ function historyToChatMessages(history: HistoryMessage[]): ChatMessage[] {
       }
       if (msg.content) {
         currentAssistant.blocks.push({ type: "text", content: msg.content });
+      }
+      if (msg.usage) {
+        currentAssistant.blocks.push({ type: "usage", usage: msg.usage });
       }
     }
   }
@@ -292,6 +295,10 @@ export function useChat() {
         } else {
           blocks.push({ type: "text", content: token });
         }
+        updateAssistant({ blocks: [...blocks] });
+      },
+      onUsage: (usage: TokenUsage) => {
+        blocks.push({ type: "usage", usage });
         updateAssistant({ blocks: [...blocks] });
       },
       onDone: () => {

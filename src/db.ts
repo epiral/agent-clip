@@ -2,7 +2,7 @@ import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:
 import { Database } from "bun:sqlite";
 import * as sqliteVec from "sqlite-vec";
 import { dbPath, ensureDataLayout, ensureTopicDir, runDir, runOutputPath, schemaPath, topicDir } from "./paths";
-import type { Message, ToolCall } from "./llm";
+import type { Message, TokenUsage, ToolCall } from "./llm";
 import { extractThinking } from "./sanitize";
 import { isProcessAlive, nowUnix, randomID } from "./shared";
 
@@ -71,6 +71,7 @@ export function openDB(): Database {
     "ALTER TABLE events ADD COLUMN timezone TEXT NOT NULL DEFAULT 'Local'",
     "ALTER TABLE events ADD COLUMN last_run_at INTEGER",
     "ALTER TABLE events ADD COLUMN canceled_at INTEGER",
+    "ALTER TABLE messages ADD COLUMN usage TEXT",
   ];
   for (const statement of migrations) {
     try {
@@ -199,12 +200,22 @@ function decodeToolCalls(value: string | null): ToolCall[] {
   return JSON.parse(value) as ToolCall[];
 }
 
+function decodeUsage(value: string | null): TokenUsage | undefined {
+  if (!value) return undefined;
+  try {
+    return JSON.parse(value) as TokenUsage;
+  } catch {
+    return undefined;
+  }
+}
+
 function toMessage(row: {
   role: string;
   content: string | null;
   tool_calls: string | null;
   tool_call_id: string | null;
   reasoning: string | null;
+  usage: string | null;
 }): Message {
   return {
     role: row.role,
@@ -212,6 +223,7 @@ function toMessage(row: {
     toolCalls: decodeToolCalls(row.tool_calls),
     toolCallId: row.tool_call_id ?? undefined,
     reasoning: row.reasoning ?? undefined,
+    usage: decodeUsage(row.usage),
   };
 }
 
@@ -223,9 +235,10 @@ export function loadMessagesPage(db: Database, topicId: string, limit = 0): Mess
       tool_calls: string | null;
       tool_call_id: string | null;
       reasoning: string | null;
+      usage: string | null;
     }, [string, number]>(
-      `SELECT role, content, tool_calls, tool_call_id, reasoning FROM (
-        SELECT role, content, tool_calls, tool_call_id, reasoning, id
+      `SELECT role, content, tool_calls, tool_call_id, reasoning, usage FROM (
+        SELECT role, content, tool_calls, tool_call_id, reasoning, usage, id
         FROM messages WHERE topic_id = ? ORDER BY id DESC LIMIT ?
       ) sub ORDER BY id ASC`,
     ).all(topicId, limit);
@@ -238,8 +251,9 @@ export function loadMessagesPage(db: Database, topicId: string, limit = 0): Mess
     tool_calls: string | null;
     tool_call_id: string | null;
     reasoning: string | null;
+    usage: string | null;
   }, [string]>(
-    "SELECT role, content, tool_calls, tool_call_id, reasoning FROM messages WHERE topic_id = ? ORDER BY id ASC",
+    "SELECT role, content, tool_calls, tool_call_id, reasoning, usage FROM messages WHERE topic_id = ? ORDER BY id ASC",
   ).all(topicId).map(toMessage);
 }
 
@@ -250,16 +264,17 @@ export function loadMessagesByRunID(db: Database, runId: string): Message[] {
     tool_calls: string | null;
     tool_call_id: string | null;
     reasoning: string | null;
+    usage: string | null;
   }, [string]>(
-    "SELECT role, content, tool_calls, tool_call_id, reasoning FROM messages WHERE run_id = ? ORDER BY id ASC",
+    "SELECT role, content, tool_calls, tool_call_id, reasoning, usage FROM messages WHERE run_id = ? ORDER BY id ASC",
   ).all(runId).map(toMessage);
 }
 
 export function saveMessages(db: Database, topicId: string, runId: string, messages: Message[]): void {
   transaction(db, () => {
     const stmt = db.query(
-      `INSERT INTO messages (topic_id, run_id, role, content, tool_calls, tool_call_id, reasoning, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO messages (topic_id, run_id, role, content, tool_calls, tool_call_id, reasoning, usage, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     const createdAt = nowUnix();
     for (const message of messages) {
@@ -271,6 +286,7 @@ export function saveMessages(db: Database, topicId: string, runId: string, messa
         message.toolCalls && message.toolCalls.length > 0 ? JSON.stringify(message.toolCalls) : null,
         message.toolCallId ?? null,
         message.reasoning ?? null,
+        message.usage ? JSON.stringify(message.usage) : null,
         createdAt,
       );
     }

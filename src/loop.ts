@@ -55,6 +55,10 @@ export async function runLoop(
       rc?.signal,
     );
 
+    if (response.usage) {
+      out.usage(response.usage);
+    }
+
     if (response.toolCalls.length > 0) {
       const assistantMessage: Message = {
         role: "assistant",
@@ -65,6 +69,9 @@ export async function runLoop(
       }
       if (response.reasoning) {
         assistantMessage.reasoning = response.reasoning;
+      }
+      if (response.usage) {
+        assistantMessage.usage = response.usage;
       }
 
       context.push(assistantMessage);
@@ -93,6 +100,9 @@ export async function runLoop(
     };
     if (response.reasoning) {
       assistantMessage.reasoning = response.reasoning;
+    }
+    if (response.usage) {
+      assistantMessage.usage = response.usage;
     }
 
     if (rc) {

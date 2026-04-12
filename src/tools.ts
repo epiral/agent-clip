@@ -41,6 +41,14 @@ export interface WebAttachment {
   is_image: boolean;
 }
 
+export interface WebTokenUsage {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  reasoning_tokens?: number;
+  cached_tokens?: number;
+}
+
 export interface WebMessage {
   role: string;
   content: string;
@@ -48,6 +56,7 @@ export interface WebMessage {
   reasoning?: string;
   tool_calls?: WebToolCall[];
   attachments?: WebAttachment[];
+  usage?: WebTokenUsage;
 }
 
 export class Registry {
@@ -844,6 +853,7 @@ export function toWebMessage(topicId: string, message: {
   toolCallId?: string;
   reasoning?: string;
   toolCalls?: ToolCall[];
+  usage?: WebTokenUsage;
 }): WebMessage {
   let content = message.content ?? '';
   let reasoning = message.reasoning;
@@ -882,6 +892,9 @@ export function toWebMessage(topicId: string, message: {
     result.content = extracted.content;
     if (extracted.reasoning) {
       result.reasoning = extracted.reasoning;
+    }
+    if (message.usage) {
+      result.usage = message.usage;
     }
     return result;
   }

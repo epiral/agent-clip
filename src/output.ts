@@ -1,6 +1,7 @@
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, writeSync } from "node:fs";
 import type { Writable } from "node:stream";
 import { dirname } from "node:path";
+import type { TokenUsage } from "./llm";
 import { runOutputPath } from "./paths";
 import { truncateRunes } from "./shared";
 
@@ -11,6 +12,7 @@ export interface Output {
   text(token: string): void;
   toolCall(name: string, args: string): void;
   toolResult(content: string): void;
+  usage(data: TokenUsage): void;
   inject(content: string): void;
   done(): void;
   close(): void;
@@ -80,6 +82,10 @@ class CLIOutput implements Output {
     this.stderr.write(`  → ${content}\n`);
   }
 
+  usage(data: TokenUsage): void {
+    this.stderr.write(`[usage] ${JSON.stringify(data)}\n`);
+  }
+
   inject(content: string): void {
     this.stderr.write(`[injected] ${content}\n`);
   }
@@ -123,6 +129,10 @@ class JSONLOutput implements Output {
 
   toolResult(content: string): void {
     this.emit({ type: "tool_result", content });
+  }
+
+  usage(data: TokenUsage): void {
+    this.emit({ type: "info", message: `[usage] ${JSON.stringify(data)}` });
   }
 
   inject(content: string): void {
