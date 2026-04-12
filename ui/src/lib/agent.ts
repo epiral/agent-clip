@@ -131,18 +131,9 @@ export function send(
   );
 }
 
-const USAGE_PREFIX = "[usage] ";
-
 function dispatchEvent(event: StreamEvent, callbacks: SendCallbacks) {
   switch (event.type) {
     case "info":
-      if (event.message.startsWith(USAGE_PREFIX)) {
-        try {
-          const usage = JSON.parse(event.message.slice(USAGE_PREFIX.length)) as TokenUsage;
-          callbacks.onUsage?.(usage);
-        } catch { /* skip malformed usage */ }
-        break;
-      }
       callbacks.onInfo?.(event.message);
       break;
     case "text":
@@ -160,6 +151,14 @@ function dispatchEvent(event: StreamEvent, callbacks: SendCallbacks) {
     case "done":
       callbacks.onDone?.();
       break;
+    default: {
+      // Extension events (pass through core's open runtime filter)
+      const raw = event as unknown as Record<string, unknown>;
+      if (raw.type === "usage") {
+        callbacks.onUsage?.(raw as unknown as TokenUsage);
+      }
+      break;
+    }
   }
 }
 

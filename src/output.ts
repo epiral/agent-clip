@@ -132,7 +132,7 @@ class JSONLOutput implements Output {
   }
 
   usage(data: TokenUsage): void {
-    this.emit({ type: "info", message: `[usage] ${JSON.stringify(data)}` });
+    this.emit({ type: "usage", ...data });
   }
 
   inject(content: string): void {
