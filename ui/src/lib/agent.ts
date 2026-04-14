@@ -6,7 +6,7 @@
  */
 
 import { invoke, invokeStream, type StreamEvent } from "@pinixai/core/web";
-import type { Topic, Run, SendOptions, HistoryMessage } from "./types";
+import type { Topic, Run, SendOptions, HistoryMessage, TokenUsage } from "./types";
 
 // ─── Topics ───
 
@@ -82,6 +82,7 @@ export interface SendCallbacks {
   onThinking?: (token: string) => void;
   onToolCall?: (name: string, args: string) => void;
   onToolResult?: (content: string) => void;
+  onUsage?: (usage: TokenUsage) => void;
   onDone?: () => void;
   onError?: (error: Error) => void;
 }
@@ -150,6 +151,14 @@ function dispatchEvent(event: StreamEvent, callbacks: SendCallbacks) {
     case "done":
       callbacks.onDone?.();
       break;
+    default: {
+      // Extension events (pass through core's open runtime filter)
+      const raw = event as unknown as Record<string, unknown>;
+      if (raw.type === "usage") {
+        callbacks.onUsage?.(raw as unknown as TokenUsage);
+      }
+      break;
+    }
   }
 }
 

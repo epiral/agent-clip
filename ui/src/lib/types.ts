@@ -31,6 +31,14 @@ export interface FileAttachment {
   preview: string; // object URL for image preview
 }
 
+export interface TokenUsage {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  reasoning_tokens?: number;
+  cached_tokens?: number;
+}
+
 /** Raw message from backend get-topic */
 export interface HistoryMessage {
   role: "user" | "assistant" | "system" | "tool";
@@ -39,6 +47,7 @@ export interface HistoryMessage {
   reasoning?: string;
   tool_calls?: { name: string; arguments: string }[];
   attachments?: { name: string; url: string; is_image: boolean }[];
+  usage?: TokenUsage;
 }
 
 // ─── Block-based message model (supports interleaved thinking/tool/text) ───
@@ -47,7 +56,8 @@ export type MessageBlock =
   | { type: "thinking"; content: string }
   | { type: "tool_call"; name: string; arguments: string; result?: string; status: "running" | "done" | "error" }
   | { type: "text"; content: string }
-  | { type: "image"; url: string; name: string };
+  | { type: "image"; url: string; name: string }
+  | { type: "usage"; usage: TokenUsage };
 
 /** A single chat message for rendering */
 export interface ChatMessage {

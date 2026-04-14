@@ -9,6 +9,7 @@ import { mermaid } from "@streamdown/mermaid";
 import "katex/dist/katex.min.css";
 import { ThinkingBlock } from "./ThinkingBlock";
 import { ToolCallBlock } from "./ToolCallBlock";
+import { UsageBlock } from "./UsageBlock";
 import { useI18n } from "../lib/i18n";
 
 const sanitizeSchema: typeof defaultSchema = {
@@ -150,5 +151,7 @@ function BlockRenderer({ block, isStreaming, isLastBlock }: {
           </Streamdown>
         </div>
       ) : null;
+    case "usage":
+      return <UsageBlock usage={block.usage} />;
   }
 }

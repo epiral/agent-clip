@@ -19,6 +19,7 @@ export interface Message {
   toolCalls?: ToolCall[];
   toolCallId?: string;
   reasoning?: string;
+  usage?: TokenUsage;
   images?: ImageData[];
 }
 
@@ -31,10 +32,19 @@ export interface ToolDef {
   };
 }
 
+export interface TokenUsage {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  reasoning_tokens?: number;
+  cached_tokens?: number;
+}
+
 export interface LLMResponse {
   content: string;
   reasoning: string;
   toolCalls: ToolCall[];
+  usage?: TokenUsage;
 }
 
 interface APIMessage {
@@ -71,11 +81,21 @@ interface OpenAIChunk {
       tool_calls?: StreamToolCallDelta[];
     };
   }>;
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+    prompt_tokens_details?: { cached_tokens?: number; cache_write_tokens?: number };
+    completion_tokens_details?: { reasoning_tokens?: number };
+  };
 }
 
 interface AnthropicEvent {
   type?: string;
   index?: number;
+  message?: {
+    usage?: { input_tokens?: number; output_tokens?: number };
+  };
   content_block?: {
     type?: string;
     id?: string;
@@ -86,6 +106,12 @@ interface AnthropicEvent {
     text?: string;
     thinking?: string;
     partial_json?: string;
+  };
+  usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+    cache_creation_input_tokens?: number;
+    cache_read_input_tokens?: number;
   };
 }
 
@@ -136,7 +162,7 @@ export async function callLLM(
   }
 
   const tcSummary = response.toolCalls.map(tc => ({ name: tc.function.name, args_length: tc.function.arguments.length }));
-  log("llm.response", { content_length: response.content.length, tool_calls: tcSummary });
+  log("llm.response", { content_length: response.content.length, tool_calls: tcSummary, usage: response.usage });
 
   return response;
 }
@@ -212,6 +238,7 @@ async function callOpenAI(
   const content: string[] = [];
   const reasoning: string[] = [];
   const toolCalls = new Map<number, ToolCall>();
+  let usage: TokenUsage | undefined;
 
   for await (const data of readSSE(response.body)) {
     if (data === "[DONE]") {
@@ -223,6 +250,20 @@ async function callOpenAI(
       chunk = JSON.parse(data) as OpenAIChunk;
     } catch {
       continue;
+    }
+
+    if (chunk.usage) {
+      usage = {
+        prompt_tokens: chunk.usage.prompt_tokens ?? 0,
+        completion_tokens: chunk.usage.completion_tokens ?? 0,
+        total_tokens: chunk.usage.total_tokens ?? 0,
+      };
+      if (chunk.usage.completion_tokens_details?.reasoning_tokens) {
+        usage.reasoning_tokens = chunk.usage.completion_tokens_details.reasoning_tokens;
+      }
+      if (chunk.usage.prompt_tokens_details?.cached_tokens) {
+        usage.cached_tokens = chunk.usage.prompt_tokens_details.cached_tokens;
+      }
     }
 
     const delta = chunk.choices?.[0]?.delta;
@@ -270,6 +311,7 @@ async function callOpenAI(
     content: content.join(""),
     reasoning: reasoning.join(""),
     toolCalls: [...toolCalls.entries()].sort((left, right) => left[0] - right[0]).map((entry) => entry[1]),
+    usage,
   };
 }
 
@@ -413,6 +455,9 @@ async function callAnthropic(
   const content: string[] = [];
   const reasoning: string[] = [];
   const blocks = new Map<number, AnthropicBlockState>();
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let cachedTokens = 0;
 
   for await (const data of readSSE(response.body)) {
     let event: AnthropicEvent;
@@ -423,6 +468,17 @@ async function callAnthropic(
     }
 
     switch (event.type) {
+      case "message_start":
+        inputTokens = event.message?.usage?.input_tokens ?? 0;
+        outputTokens = event.message?.usage?.output_tokens ?? 0;
+        break;
+      case "message_delta":
+        if (event.usage) {
+          if (event.usage.output_tokens) outputTokens = event.usage.output_tokens;
+          if (event.usage.input_tokens) inputTokens = event.usage.input_tokens;
+          if (event.usage.cache_read_input_tokens) cachedTokens = event.usage.cache_read_input_tokens;
+        }
+        break;
       case "content_block_start":
         blocks.set(event.index ?? 0, {
           blockType: event.content_block?.type ?? "",
@@ -474,10 +530,20 @@ async function callAnthropic(
       },
     } satisfies ToolCall));
 
+  const usage: TokenUsage | undefined = (inputTokens || outputTokens)
+    ? {
+        prompt_tokens: inputTokens,
+        completion_tokens: outputTokens,
+        total_tokens: inputTokens + outputTokens,
+        ...(cachedTokens ? { cached_tokens: cachedTokens } : {}),
+      }
+    : undefined;
+
   return {
     content: content.join(""),
     reasoning: reasoning.join(""),
     toolCalls,
+    usage,
   };
 }
 
