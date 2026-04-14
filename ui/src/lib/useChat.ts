@@ -111,6 +111,7 @@ export function useChat() {
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [scrollToBottomTrigger, setScrollToBottomTrigger] = useState(0);
 
   // Per-topic message cache (preserves streaming state across switches)
   const messageCacheRef = useRef<Map<string, ChatMessage[]>>(new Map());
@@ -192,6 +193,7 @@ export function useChat() {
       }
 
       setMessages(chatMsgs);
+      setScrollToBottomTrigger((n) => n + 1);
       messageCacheRef.current.set(topicId, chatMsgs);
     } catch (e) {
       setMessages([]);
@@ -431,6 +433,7 @@ export function useChat() {
     activeRunId,
     hasMore,
     isLoadingMore,
+    scrollToBottomTrigger,
     loadTopics,
     selectTopic,
     send,

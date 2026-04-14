@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Scroll Pagination Demo</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: system-ui; background: #111; color: #eee; height: 100vh; display: flex; flex-direction: column; }
+  #controls { padding: 8px 16px; background: #222; border-bottom: 1px solid #333; display: flex; gap: 8px; align-items: center; font-size: 13px; }
+  #controls button { padding: 4px 12px; border-radius: 4px; border: 1px solid #555; background: #333; color: #eee; cursor: pointer; }
+  #controls button:hover { background: #444; }
+  #scroll-container { flex: 1; overflow-y: auto; }
+  .message { padding: 16px 24px; border-bottom: 1px solid #222; }
+  .message.user { background: #1a1a2e; }
+  .message.assistant { background: #111; }
+  .message .role { font-size: 11px; font-weight: 600; text-transform: uppercase; color: #888; margin-bottom: 4px; }
+  .message .content { font-size: 14px; line-height: 1.5; }
+  #load-more { text-align: center; padding: 12px; font-size: 12px; color: #666; cursor: pointer; }
+  #load-more:hover { color: #aaa; }
+  #log { position: fixed; bottom: 0; right: 0; width: 350px; max-height: 200px; overflow-y: auto; background: rgba(0,0,0,0.9); border: 1px solid #333; font-size: 11px; font-family: monospace; padding: 8px; color: #0f0; z-index: 100; }
+  #log div { margin-bottom: 2px; }
+  #status { color: #888; }
+</style>
+</head>
+<body>
+
+<div id="controls">
+  <button onclick="resetDemo()">Reset (load initial 20)</button>
+  <button onclick="loadMore()">Load More (prepend 20)</button>
+  <span id="status">—</span>
+</div>
+
+<div id="scroll-container"></div>
+<div id="log"></div>
+
+<script>
+// State
+let messages = [];
+let totalMessages = 100; // simulate 100 messages in "DB"
+let oldestLoaded = totalMessages; // cursor: next page loads before this
+let hasMore = true;
+let isLoadingMore = false;
+let prevScrollHeight = 0;
+
+const container = document.getElementById('scroll-container');
+const status = document.getElementById('status');
+const logEl = document.getElementById('log');
+
+function log(msg) {
+  const d = document.createElement('div');
+  d.textContent = `${new Date().toISOString().slice(11,23)} ${msg}`;
+  logEl.appendChild(d);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+// Generate fake message
+function makeMessage(index) {
+  const role = index % 3 === 0 ? 'user' : 'assistant';
+  return { id: `msg-${index}`, role, content: `Message #${index} — ${'Lorem ipsum dolor sit amet. '.repeat(3)}` };
+}
+
+// Render all messages
+function render() {
+  let html = '';
+  if (hasMore) {
+    html += `<div id="load-more" onclick="loadMore()">⬆ Load earlier messages</div>`;
+  }
+  for (const msg of messages) {
+    html += `<div class="message ${msg.role}" data-id="${msg.id}">
+      <div class="role">${msg.role}</div>
+      <div class="content">${msg.content}</div>
+    </div>`;
+  }
+  container.innerHTML = html;
+  status.textContent = `${messages.length} messages loaded, oldestLoaded=${oldestLoaded}, hasMore=${hasMore}`;
+}
+
+// Initial load: newest 20 messages, scroll to bottom
+function resetDemo() {
+  messages = [];
+  oldestLoaded = totalMessages;
+  hasMore = true;
+
+  const start = Math.max(0, totalMessages - 20);
+  for (let i = start; i < totalMessages; i++) {
+    messages.push(makeMessage(i));
+  }
+  oldestLoaded = start;
+  hasMore = oldestLoaded > 0;
+
+  render();
+  // Scroll to bottom on initial load
+  container.scrollTop = container.scrollHeight;
+  log(`RESET: loaded ${messages.length} msgs, scrolled to bottom`);
+}
+
+// Load more: prepend older messages
+async function loadMore() {
+  if (!hasMore || isLoadingMore) return;
+  isLoadingMore = true;
+  log(`LOAD_MORE: start, scrollTop=${container.scrollTop}, scrollHeight=${container.scrollHeight}`);
+
+  // Capture scroll state BEFORE DOM change
+  prevScrollHeight = container.scrollHeight;
+
+  // Simulate network delay
+  await new Promise(r => setTimeout(r, 300));
+
+  // Load 20 older messages
+  const end = oldestLoaded;
+  const start = Math.max(0, end - 20);
+  const newMessages = [];
+  for (let i = start; i < end; i++) {
+    newMessages.push(makeMessage(i));
+  }
+  oldestLoaded = start;
+  hasMore = oldestLoaded > 0;
+
+  // Prepend
+  messages = [...newMessages, ...messages];
+  render();
+
+  // Restore scroll position: keep user's view stable
+  const delta = container.scrollHeight - prevScrollHeight;
+  container.scrollTop += delta;
+  log(`LOAD_MORE: done, delta=${delta}, new scrollTop=${container.scrollTop}, scrollHeight=${container.scrollHeight}`);
+
+  isLoadingMore = false;
+  prevScrollHeight = 0;
+}
+
+// Scroll event: trigger loadMore when near top
+container.addEventListener('scroll', () => {
+  if (container.scrollTop < 100 && hasMore && !isLoadingMore) {
+    log(`SCROLL_TRIGGER: scrollTop=${container.scrollTop} < 100, triggering loadMore`);
+    loadMore();
+  }
+});
+
+// Init
+resetDemo();
+</script>
+</body>
+</html>

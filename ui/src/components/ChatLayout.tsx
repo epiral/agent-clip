@@ -182,6 +182,7 @@ export function ChatLayout() {
             hasMore={chat.hasMore}
             isLoadingMore={chat.isLoadingMore}
             onLoadMore={chat.loadMore}
+            scrollToBottomTrigger={chat.scrollToBottomTrigger}
           />
         </div>
 

@@ -13,6 +13,7 @@ interface MessageListProps {
   hasMore?: boolean;
   isLoadingMore?: boolean;
   onLoadMore?: () => void;
+  scrollToBottomTrigger?: number;
 }
 
 export interface MessageListHandle {
@@ -20,7 +21,7 @@ export interface MessageListHandle {
   showScrollButton: boolean;
 }
 
-export const MessageList = forwardRef<MessageListHandle, MessageListProps>(function MessageList({ messages, isStreaming, onSendPrompt, agentName, onScrollButtonChange, hasMore, isLoadingMore, onLoadMore }, ref) {
+export const MessageList = forwardRef<MessageListHandle, MessageListProps>(function MessageList({ messages, isStreaming, onSendPrompt, agentName, onScrollButtonChange, hasMore, isLoadingMore, onLoadMore, scrollToBottomTrigger }, ref) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [userHasScrolledUp, setUserHasScrolledUp] = useState(false);
@@ -83,13 +84,11 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(funct
 
   // Preserve scroll position when prepending older messages
   const prevScrollHeightRef = useRef(0);
-  const didLoadMoreRef = useRef(false);
 
   // Capture scrollHeight before DOM update when loading more
   useEffect(() => {
     if (isLoadingMore && scrollRef.current) {
       prevScrollHeightRef.current = scrollRef.current.scrollHeight;
-      didLoadMoreRef.current = true;
     }
   }, [isLoadingMore]);
 
@@ -103,17 +102,13 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(funct
     }
   }, [messages]);
 
-  // Initial scroll on load (skip after loadMore)
+  // Scroll to bottom only on explicit trigger (topic change)
   useEffect(() => {
-    if (didLoadMoreRef.current) {
-      didLoadMoreRef.current = false;
-      return;
-    }
-    if (messages.length > 0 && !userHasScrolledUp) {
+    if (scrollToBottomTrigger && scrollToBottomTrigger > 0) {
       scrollToBottom();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages.length]);
+  }, [scrollToBottomTrigger]);
 
   if (messages.length === 0) {
     return (
