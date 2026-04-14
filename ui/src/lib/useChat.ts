@@ -118,8 +118,6 @@ export function useChat() {
   const streamRef = useRef<StreamState | null>(null);
   // Pagination cursor: oldest message ID in current loaded set
   const oldestIdRef = useRef<number | null>(null);
-  // Raw history for prepending older pages
-  const historyRef = useRef<HistoryMessage[]>([]);
 
   const loadTopics = useCallback(async () => {
     try {
@@ -145,7 +143,6 @@ export function useChat() {
     if (!topicId) {
       setMessages([]);
       setIsStreaming(false);
-      historyRef.current = [];
       oldestIdRef.current = null;
       return;
     }
@@ -165,7 +162,6 @@ export function useChat() {
     // Load from backend
     try {
       const data = await agent.getTopicData(topicId);
-      historyRef.current = data.messages;
       oldestIdRef.current = data.oldest_id;
       setHasMore(data.has_more);
       const chatMsgs = historyToChatMessages(data.messages);
@@ -214,12 +210,11 @@ export function useChat() {
         setHasMore(false);
         return;
       }
-      historyRef.current = [...data.messages, ...historyRef.current];
       oldestIdRef.current = data.oldest_id;
       setHasMore(data.has_more);
-      const chatMsgs = historyToChatMessages(historyRef.current);
-      setMessages(chatMsgs);
-      messageCacheRef.current.set(currentTopicId, chatMsgs);
+      // Convert only the new page — existing messages keep their IDs (stable React keys)
+      const olderMsgs = historyToChatMessages(data.messages);
+      setMessages((prev) => [...olderMsgs, ...prev]);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {

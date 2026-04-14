@@ -98,7 +98,7 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(funct
     const el = scrollRef.current;
     const prevHeight = prevScrollHeightRef.current;
     if (el && prevHeight > 0 && el.scrollHeight > prevHeight) {
-      el.scrollTop = el.scrollHeight - prevHeight;
+      el.scrollTop += el.scrollHeight - prevHeight;
       prevScrollHeightRef.current = 0;
     }
   }, [messages]);
