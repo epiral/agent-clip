@@ -11,7 +11,7 @@
         "@fontsource/inter": "^5.2.8",
         "@fontsource/jetbrains-mono": "^5.2.8",
         "@fontsource/playfair-display": "^5.2.8",
-        "@pinixai/core": "^0.8.0",
+        "@pinixai/core": "0.13.0",
         "@streamdown/cjk": "^1.0.2",
         "@streamdown/code": "^1.1.0",
         "@streamdown/math": "^1.0.2",
@@ -286,7 +286,9 @@
 
     "@open-draft/until": ["@open-draft/until@2.1.0", "https://registry.npmmirror.com/@open-draft/until/-/until-2.1.0.tgz", {}, "sha512-U69T3ItWHvLwGg5eJ0n3I62nWuE6ilHlmz7zM0npLBRvPRd7e6NYmg54vvRtP5mZG7kZqZCFVdsTWo7BPtBujg=="],
 
-    "@pinixai/core": ["@pinixai/core@0.8.0", "https://registry.npmmirror.com/@pinixai/core/-/core-0.8.0.tgz", { "dependencies": { "@bufbuild/protobuf": "^2.11.0", "@connectrpc/connect": "^2.1.1", "@connectrpc/connect-web": "^2.1.1", "@modelcontextprotocol/sdk": "^1.27.1", "zod": "^4.3.6" }, "peerDependencies": { "typescript": "^5.9.3" } }, "sha512-smtjwCwwDgw7drGzdHk9cahQ6z3TkOYfZOLEd9RmYoidTVNR7Vot/FHGa7AuZcIH5r04288dTz9iwTlXdmivOA=="],
+    "@pinixai/core": ["@pinixai/core@0.13.0", "", { "dependencies": { "@modelcontextprotocol/sdk": "^1.27.1", "@pinixai/hub-client": "^0.1.1", "zod": "^4.3.6" }, "peerDependencies": { "typescript": "^5.9.3" } }, "sha512-6jP5Tz0Bbg70IFxyUINGoLDaac40HwRor1wndUC29hw8beYDv3/QKOnl7zCFbc9rygdQFy05LwVzUNaKs/S/iQ=="],
+
+    "@pinixai/hub-client": ["@pinixai/hub-client@0.1.2", "", { "dependencies": { "@bufbuild/protobuf": "^2.11.0", "@connectrpc/connect": "^2.1.1", "@connectrpc/connect-web": "^2.1.1" }, "peerDependencies": { "typescript": "^5.9.3" } }, "sha512-mdanOlFX3ncgqk9PU7GoAJgXQqQNx8HB04cYenzKb14JJG/18Jc/24BSFoNb3HgsdbPpdOPvxKpDgY7YEzyzQg=="],
 
     "@rolldown/pluginutils": ["@rolldown/pluginutils@1.0.0-rc.3", "https://registry.npmmirror.com/@rolldown/pluginutils/-/pluginutils-1.0.0-rc.3.tgz", {}, "sha512-eybk3TjzzzV97Dlj5c+XrBFW57eTNhzod66y9HrBlzJ6NsCrWCp/2kaPS3K9wJmurBC0Tdw4yPjXKZqlznim3Q=="],
 

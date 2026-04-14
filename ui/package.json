@@ -10,13 +10,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@pinixai/core": "^0.8.0",
     "@base-ui/react": "^1.2.0",
     "@fontsource-variable/geist": "^5.2.8",
     "@fontsource-variable/noto-sans-sc": "^5.2.10",
     "@fontsource/inter": "^5.2.8",
     "@fontsource/jetbrains-mono": "^5.2.8",
     "@fontsource/playfair-display": "^5.2.8",
+    "@pinixai/core": "0.13.0",
     "@streamdown/cjk": "^1.0.2",
     "@streamdown/code": "^1.1.0",
     "@streamdown/math": "^1.0.2",
