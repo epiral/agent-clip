@@ -173,12 +173,15 @@ export function ChatLayout() {
 
         {/* Messages */}
         <div className="flex-1 overflow-hidden relative">
-          <MessageList 
-            ref={messageListRef} 
-            messages={chat.messages} 
-            isStreaming={chat.isStreaming} 
-            onSendPrompt={chat.send} 
-            agentName={agentName} 
+          <MessageList
+            ref={messageListRef}
+            messages={chat.messages}
+            isStreaming={chat.isStreaming}
+            onSendPrompt={chat.send}
+            agentName={agentName}
+            hasMore={chat.hasMore}
+            isLoadingMore={chat.isLoadingMore}
+            onLoadMore={chat.loadMore}
           />
         </div>
 

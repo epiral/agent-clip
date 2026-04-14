@@ -61,6 +61,8 @@ interface WebRun {
 interface TopicResponse {
   messages: WebMessage[];
   active_run: WebRun | null;
+  has_more: boolean;
+  oldest_id: number | null;
 }
 
 interface WebTopic {
@@ -415,9 +417,11 @@ export class AgentClipCommands {
       throw new Error("usage: get-topic <topic-id>");
     }
 
-    const limit = resolveIntegerOption(input, ["-l", "--limit"], "limit", 100);
-    const messages = loadMessagesPage(db, topicId, limit).map((message) => toWebMessage(topicId, message));
-    const activeRun = getActiveRun(db, topicId);
+    const limit = resolveIntegerOption(input, ["-l", "--limit"], "limit", 50);
+    const before = resolveIntegerOption(input, ["--before"], "before", 0) || undefined;
+    const page = loadMessagesPage(db, topicId, limit, before);
+    const messages = page.messages.map((message) => toWebMessage(topicId, message));
+    const activeRun = before ? null : getActiveRun(db, topicId);
 
     return {
       messages,
@@ -430,6 +434,8 @@ export class AgentClipCommands {
             output: activeRun.async ? readRunOutput(activeRun.id) : undefined,
           }
         : null,
+      has_more: page.has_more,
+      oldest_id: page.oldest_id,
     };
   }
 

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useImperativeHandle, forwardRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useImperativeHandle, forwardRef } from "react";
 import type { ChatMessage } from "../lib/types";
 import { MessageBubble } from "./MessageBubble";
 import { Globe, Sparkles, Search, Package, ChevronDown } from "lucide-react";
@@ -10,6 +10,9 @@ interface MessageListProps {
   onSendPrompt?: (msg: string) => void;
   agentName?: string;
   onScrollButtonChange?: (show: boolean) => void;
+  hasMore?: boolean;
+  isLoadingMore?: boolean;
+  onLoadMore?: () => void;
 }
 
 export interface MessageListHandle {
@@ -17,7 +20,7 @@ export interface MessageListHandle {
   showScrollButton: boolean;
 }
 
-export const MessageList = forwardRef<MessageListHandle, MessageListProps>(function MessageList({ messages, isStreaming, onSendPrompt, agentName, onScrollButtonChange }, ref) {
+export const MessageList = forwardRef<MessageListHandle, MessageListProps>(function MessageList({ messages, isStreaming, onSendPrompt, agentName, onScrollButtonChange, hasMore, isLoadingMore, onLoadMore }, ref) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [userHasScrolledUp, setUserHasScrolledUp] = useState(false);
@@ -44,7 +47,7 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(funct
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
     const distanceToBottom = scrollHeight - scrollTop - clientHeight;
-    
+
     // If user scrolled up more than 100px from bottom
     if (distanceToBottom > 100) {
       setUserHasScrolledUp(true);
@@ -54,6 +57,11 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(funct
       setUserHasScrolledUp(false);
       setShowScrollButton(false);
       onScrollButtonChange?.(false);
+    }
+
+    // Load more when scrolled near top
+    if (scrollTop < 100 && hasMore && !isLoadingMore && onLoadMore) {
+      onLoadMore();
     }
   };
 
@@ -72,6 +80,26 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(funct
       return () => clearTimeout(timeout);
     }
   }, [messages, isStreaming, userHasScrolledUp]);
+
+  // Preserve scroll position when prepending older messages
+  const prevScrollHeightRef = useRef(0);
+
+  // Capture scrollHeight before DOM update when loading more
+  useEffect(() => {
+    if (isLoadingMore && scrollRef.current) {
+      prevScrollHeightRef.current = scrollRef.current.scrollHeight;
+    }
+  }, [isLoadingMore]);
+
+  // After prepend render: restore scroll position
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    const prevHeight = prevScrollHeightRef.current;
+    if (el && prevHeight > 0 && el.scrollHeight > prevHeight) {
+      el.scrollTop = el.scrollHeight - prevHeight;
+      prevScrollHeightRef.current = 0;
+    }
+  }, [messages]);
 
   // Initial scroll on load
   useEffect(() => {
@@ -134,6 +162,21 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(funct
         className="h-full overflow-y-auto w-full scroll-smooth no-scrollbar"
       >
         <div className="pb-32">
+          {isLoadingMore && (
+            <div className="flex justify-center py-4">
+              <span className="text-xs text-muted-foreground animate-pulse">Loading...</span>
+            </div>
+          )}
+          {hasMore && !isLoadingMore && (
+            <div className="flex justify-center py-3">
+              <button
+                onClick={onLoadMore}
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {t("Load earlier messages")}
+              </button>
+            </div>
+          )}
           {messages.map((msg) => (
             <MessageBubble key={msg.id} message={msg} agentName={agentName} />
           ))}

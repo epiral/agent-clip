@@ -109,11 +109,17 @@ export function useChat() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   // Per-topic message cache (preserves streaming state across switches)
   const messageCacheRef = useRef<Map<string, ChatMessage[]>>(new Map());
   // Active stream state (survives topic switches)
   const streamRef = useRef<StreamState | null>(null);
+  // Pagination cursor: oldest message ID in current loaded set
+  const oldestIdRef = useRef<number | null>(null);
+  // Raw history for prepending older pages
+  const historyRef = useRef<HistoryMessage[]>([]);
 
   const loadTopics = useCallback(async () => {
     try {
@@ -134,10 +140,13 @@ export function useChat() {
     setCurrentTopicId(topicId);
     setError(null);
     setActiveRunId(null);
+    setHasMore(false);
 
     if (!topicId) {
       setMessages([]);
       setIsStreaming(false);
+      historyRef.current = [];
+      oldestIdRef.current = null;
       return;
     }
 
@@ -156,6 +165,9 @@ export function useChat() {
     // Load from backend
     try {
       const data = await agent.getTopicData(topicId);
+      historyRef.current = data.messages;
+      oldestIdRef.current = data.oldest_id;
+      setHasMore(data.has_more);
       const chatMsgs = historyToChatMessages(data.messages);
 
       // If there's an active run, show indicator
@@ -191,6 +203,29 @@ export function useChat() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentTopicId, messages]);
+
+  // ─── Load more (older messages) ───
+  const loadMore = useCallback(async () => {
+    if (!currentTopicId || !oldestIdRef.current || isLoadingMore || !hasMore) return;
+    setIsLoadingMore(true);
+    try {
+      const data = await agent.getTopicData(currentTopicId, oldestIdRef.current);
+      if (data.messages.length === 0) {
+        setHasMore(false);
+        return;
+      }
+      historyRef.current = [...data.messages, ...historyRef.current];
+      oldestIdRef.current = data.oldest_id;
+      setHasMore(data.has_more);
+      const chatMsgs = historyToChatMessages(historyRef.current);
+      setMessages(chatMsgs);
+      messageCacheRef.current.set(currentTopicId, chatMsgs);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [currentTopicId, isLoadingMore, hasMore]);
 
   // ─── Send message ───
   const send = useCallback((message: string, topicId?: string, files?: File[]) => {
@@ -399,10 +434,13 @@ export function useChat() {
     isStreaming,
     error,
     activeRunId,
+    hasMore,
+    isLoadingMore,
     loadTopics,
     selectTopic,
     send,
     cancel,
     removeTopic,
+    loadMore,
   };
 }

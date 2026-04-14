@@ -29,10 +29,14 @@ export interface TopicResponse {
     async: boolean;
     output?: string;
   } | null;
+  has_more: boolean;
+  oldest_id: number | null;
 }
 
-export async function getTopicData(topicId: string): Promise<TopicResponse> {
-  return invoke<TopicResponse>("get-topic", { args: [topicId] });
+export async function getTopicData(topicId: string, before?: number): Promise<TopicResponse> {
+  const args = [topicId];
+  if (before) args.push("--before", String(before));
+  return invoke<TopicResponse>("get-topic", { args });
 }
 
 export async function deleteTopic(topicId: string): Promise<void> {

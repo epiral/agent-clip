@@ -227,34 +227,55 @@ function toMessage(row: {
   };
 }
 
-export function loadMessagesPage(db: Database, topicId: string, limit = 0): Message[] {
-  if (limit > 0) {
-    const rows = db.query<{
-      role: string;
-      content: string | null;
-      tool_calls: string | null;
-      tool_call_id: string | null;
-      reasoning: string | null;
-      usage: string | null;
-    }, [string, number]>(
-      `SELECT role, content, tool_calls, tool_call_id, reasoning, usage FROM (
-        SELECT role, content, tool_calls, tool_call_id, reasoning, usage, id
-        FROM messages WHERE topic_id = ? ORDER BY id DESC LIMIT ?
-      ) sub ORDER BY id ASC`,
-    ).all(topicId, limit);
-    return rows.map(toMessage);
-  }
+export interface MessagePage {
+  messages: Message[];
+  oldest_id: number | null;
+  has_more: boolean;
+}
 
-  return db.query<{
+export function loadMessagesPage(db: Database, topicId: string, limit = 0, before?: number): MessagePage {
+  type Row = {
+    id: number;
     role: string;
     content: string | null;
     tool_calls: string | null;
     tool_call_id: string | null;
     reasoning: string | null;
     usage: string | null;
-  }, [string]>(
-    "SELECT role, content, tool_calls, tool_call_id, reasoning, usage FROM messages WHERE topic_id = ? ORDER BY id ASC",
-  ).all(topicId).map(toMessage);
+  };
+
+  let rows: Row[];
+
+  if (limit > 0 && before) {
+    rows = db.query<Row, [string, number, number]>(
+      `SELECT id, role, content, tool_calls, tool_call_id, reasoning, usage FROM (
+        SELECT id, role, content, tool_calls, tool_call_id, reasoning, usage
+        FROM messages WHERE topic_id = ? AND id < ? ORDER BY id DESC LIMIT ?
+      ) sub ORDER BY id ASC`,
+    ).all(topicId, before, limit);
+  } else if (limit > 0) {
+    rows = db.query<Row, [string, number]>(
+      `SELECT id, role, content, tool_calls, tool_call_id, reasoning, usage FROM (
+        SELECT id, role, content, tool_calls, tool_call_id, reasoning, usage
+        FROM messages WHERE topic_id = ? ORDER BY id DESC LIMIT ?
+      ) sub ORDER BY id ASC`,
+    ).all(topicId, limit);
+  } else {
+    rows = db.query<Row, [string]>(
+      "SELECT id, role, content, tool_calls, tool_call_id, reasoning, usage FROM messages WHERE topic_id = ? ORDER BY id ASC",
+    ).all(topicId);
+  }
+
+  const oldestId = rows.length > 0 ? rows[0].id : null;
+  const hasMore = oldestId !== null && !!db.query<{ c: number }, [string, number]>(
+    "SELECT 1 as c FROM messages WHERE topic_id = ? AND id < ? LIMIT 1",
+  ).get(topicId, oldestId);
+
+  return {
+    messages: rows.map(toMessage),
+    oldest_id: oldestId,
+    has_more: hasMore,
+  };
 }
 
 export function loadMessagesByRunID(db: Database, runId: string): Message[] {
