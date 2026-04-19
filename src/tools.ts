@@ -662,6 +662,14 @@ function formatClipInfo(clip: RuntimeClipInfo): string {
   const lines = [`Clip: ${clip.name}`];
   if (clip.package) lines.push(`Package: ${clip.package}`);
   if (clip.version) lines.push(`Version: ${clip.version}`);
+  if (clip.domain) lines.push(`\n${clip.domain}`);
+  if (clip.description) lines.push(clip.description);
+  if (clip.patterns && clip.patterns.length > 0) {
+    lines.push('', 'Patterns:');
+    for (const p of clip.patterns) {
+      lines.push(`  ${p}`);
+    }
+  }
   if ((clip.commands ?? []).length > 0) {
     lines.push('', 'Commands:');
     for (const cmd of clip.commands ?? []) {
