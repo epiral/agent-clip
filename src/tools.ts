@@ -685,6 +685,43 @@ function formatClipInfo(clip: RuntimeClipInfo): string {
   return lines.join('\n');
 }
 
+function formatCommandHelp(clip: RuntimeClipInfo, command: string): string {
+  const cmd = (clip.commands ?? []).find((c) => c.name === command);
+  if (!cmd) {
+    return `Unknown command: ${clip.name} ${command}\nRun "${clip.name} --help" to see available commands.`;
+  }
+
+  const lines = [`Command: ${clip.name} ${cmd.name}`];
+  if (cmd.description) lines.push(cmd.description);
+  lines.push('');
+
+  if (cmd.input) {
+    try {
+      const schema = JSON.parse(cmd.input);
+      const props = schema.properties || {};
+      const required = new Set(schema.required || []);
+      const entries = Object.entries(props);
+      if (entries.length > 0) {
+        lines.push('Parameters:');
+        for (const [k, v] of entries as [string, any][]) {
+          const req = required.has(k) ? ' (required)' : '';
+          const type = v.type || 'any';
+          const desc = v.description ? ` — ${v.description}` : '';
+          lines.push(`  --${k} ${type}${req}${desc}`);
+        }
+      } else {
+        lines.push('(no parameters)');
+      }
+    } catch {
+      lines.push('(parameters unavailable)');
+    }
+  } else {
+    lines.push('(no parameter schema)');
+  }
+
+  return lines.join('\n');
+}
+
 /**
  * Register ALL runtime clips as top-level commands.
  * Each clip's alias becomes a command that forwards subcommands via IPC invokeClip().
@@ -733,6 +770,10 @@ function registerSingleClipCommand(registry: Registry, clip: RuntimeClipInfo): v
           command = twoWord;
           restArgs = args.slice(2);
         }
+      }
+
+      if (restArgs.includes('--help') || restArgs.includes('-h')) {
+        return formatCommandHelp(clip, command);
       }
 
       const input = buildClipInvokeInput(restArgs, stdin);
