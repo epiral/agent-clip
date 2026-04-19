@@ -1,6 +1,20 @@
+CREATE TABLE IF NOT EXISTS agents (
+    id            TEXT PRIMARY KEY,
+    name          TEXT NOT NULL,
+    llm_provider  TEXT,
+    llm_model     TEXT,
+    max_tokens    INTEGER,
+    system_prompt TEXT,
+    scope         TEXT,
+    pinned        TEXT,
+    created_at    INTEGER NOT NULL,
+    updated_at    INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS topics (
     id         TEXT PRIMARY KEY,
     name       TEXT NOT NULL,
+    agent_id   TEXT REFERENCES agents(id),
     created_at INTEGER NOT NULL
 );
 

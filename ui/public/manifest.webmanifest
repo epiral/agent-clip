@@ -1,0 +1,17 @@
+{
+  "name": "Agent",
+  "short_name": "Agent",
+  "description": "AI Agent — 自定义智能体平台",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8f6f2",
+  "theme_color": "#3a7d5c",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

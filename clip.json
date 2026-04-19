@@ -1,7 +1,7 @@
 {
   "name": "@pinix/agent",
-  "version": "0.6.12",
-  "description": "AI Agent \u2014 agentic loop with shell, packages, and memory",
+  "version": "0.7.7",
+  "description": "AI Agent — agentic loop with shell, packages, and memory",
   "runtime": "bun",
   "main": "index.ts",
   "web": "web/",

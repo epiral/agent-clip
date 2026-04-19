@@ -1,5 +1,6 @@
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { parseDocument, YAMLMap, YAMLSeq } from "yaml";
+import type { Agent } from "./db";
 import { configPath, ensureDataLayout, seedRoot } from "./paths";
 import { maskSecret } from "./shared";
 
@@ -25,6 +26,28 @@ export interface Config {
   llm_model: string;
   max_tokens?: number;
   system_prompt: string;
+}
+
+export interface ResolvedConfig extends Config {
+  scope: string[] | null;
+}
+
+export function resolveAgentConfig(globalCfg: Config, agent?: Agent | null): ResolvedConfig {
+  if (!agent) {
+    return { ...globalCfg, scope: null };
+  }
+
+  const hasScope = agent.scope !== null;
+  return {
+    ...globalCfg,
+    name: agent.name,
+    llm_provider: agent.llm_provider ?? globalCfg.llm_provider,
+    llm_model: agent.llm_model ?? globalCfg.llm_model,
+    max_tokens: agent.max_tokens ?? globalCfg.max_tokens,
+    system_prompt: agent.system_prompt ?? globalCfg.system_prompt,
+    pinned: hasScope ? (agent.pinned ?? []) : (agent.pinned ?? globalCfg.pinned),
+    scope: agent.scope,
+  };
 }
 
 export interface ProviderJSON {

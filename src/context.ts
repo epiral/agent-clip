@@ -1,6 +1,6 @@
 import { listClips, type RuntimeClipInfo } from "@pinixai/core";
 import { Database } from "bun:sqlite";
-import type { Config } from "./config";
+import type { ResolvedConfig } from "./config";
 import { getCompletedRuns, loadMessagesByRunID } from "./db";
 import { searchMemorySemantic, getEmbedding } from "./memory";
 import { textMessage, type Message } from "./llm";
@@ -88,7 +88,7 @@ export interface ContextResult {
   messages: Message[];
 }
 
-export async function buildContext(db: Database, cfg: Config, topicId: string, userMessage: string): Promise<ContextResult> {
+export async function buildContext(db: Database, cfg: ResolvedConfig, topicId: string, userMessage: string): Promise<ContextResult> {
   advanceRound();
 
   let systemPrompt = cfg.name ? `你是 ${cfg.name}。\n\n` : "";
@@ -132,7 +132,7 @@ export async function buildContext(db: Database, cfg: Config, topicId: string, u
   return { systemPrompt, messages };
 }
 
-async function wrapUserMessage(cfg: Config, db: Database, userMessage: string): Promise<Message> {
+async function wrapUserMessage(cfg: ResolvedConfig, db: Database, userMessage: string): Promise<Message> {
   let content = `<user>\n${userMessage}\n</user>`;
 
   const recall = await buildRecall(db, cfg, userMessage);
@@ -148,7 +148,7 @@ async function wrapUserMessage(cfg: Config, db: Database, userMessage: string): 
   return textMessage("user", content);
 }
 
-async function buildRecall(db: Database, cfg: Config, userMessage: string): Promise<string> {
+async function buildRecall(db: Database, cfg: ResolvedConfig, userMessage: string): Promise<string> {
   const queryEmbedding = await getEmbedding(cfg, userMessage).catch(() => []);
   if (queryEmbedding.length === 0) {
     return "";
@@ -167,7 +167,7 @@ async function buildRecall(db: Database, cfg: Config, userMessage: string): Prom
     .join("\n");
 }
 
-function buildEnvironment(cfg: Config): string {
+function buildEnvironment(cfg: ResolvedConfig): string {
   const lines = [`<time>${new Date().toString()}</time>`];
 
   if (cfg.pinned.length > 0) {
@@ -182,7 +182,7 @@ function buildEnvironment(cfg: Config): string {
   return lines.join("\n");
 }
 
-async function buildClipContextSection(cfg: Config): Promise<string> {
+async function buildClipContextSection(cfg: ResolvedConfig): Promise<string> {
   const contextAliases = getContextClipAliases(cfg.pinned);
   if (contextAliases.length === 0) {
     return "";
@@ -193,6 +193,11 @@ async function buildClipContextSection(cfg: Config): Promise<string> {
     allClips = await listClips();
   } catch {
     return "";
+  }
+
+  if (cfg.scope) {
+    const scopeSet = new Set(cfg.scope);
+    allClips = allClips.filter((c) => scopeSet.has(c.name));
   }
 
   const clipMap = new Map(allClips.map((c) => [c.name, c]));

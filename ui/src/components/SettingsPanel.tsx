@@ -19,7 +19,6 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
   const [config, setConfigState] = useState<AgentConfig | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // Add provider form
   const [showAddProvider, setShowAddProvider] = useState(false);
   const [newProviderName, setNewProviderName] = useState("");
   const [newProviderUrl, setNewProviderUrl] = useState("");
@@ -115,20 +114,16 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
               </select>
             </Section>
 
-            {/* Identity */}
-            <Section title={t("Identity")}>
-              <div className="space-y-2">
-                <label className="text-sm text-muted-foreground">{t("Agent Name")}</label>
-                <SettingInput
-                  value={config.name}
-                  onSave={(v) => handleSet("name", v)}
-                />
-              </div>
-            </Section>
-
-            {/* Language Model */}
-            <Section title={t("Language Model")}>
+            {/* Global Defaults */}
+            <Section title={t("Global Defaults")}>
+              <p className="text-[11px] text-muted-foreground -mt-1 mb-3">
+                Agent 未指定时使用这些默认值
+              </p>
               <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">{t("Agent Name")}</label>
+                  <SettingInput value={config.name} onSave={(v) => handleSet("name", v)} />
+                </div>
                 <div className="space-y-2">
                   <label className="text-sm text-muted-foreground">{t("LLM Provider")}</label>
                   <select
@@ -140,13 +135,17 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
                     {providerNames.map(p => <option key={p} value={p}>{p}</option>)}
                   </select>
                 </div>
-
                 <div className="space-y-2">
                   <label className="text-sm text-muted-foreground">{t("LLM Model")}</label>
-                  <SettingInput
-                    value={config.llm_model}
-                    onSave={(v) => handleSet("llm_model", v)}
-                    mono
+                  <SettingInput value={config.llm_model} onSave={(v) => handleSet("llm_model", v)} mono />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">{t("System Prompt")}</label>
+                  <textarea
+                    defaultValue={config.system_prompt}
+                    onBlur={(e) => handleSet("system_prompt", e.target.value)}
+                    className="w-full min-h-[160px] rounded-md border border-border bg-background p-3 text-sm font-mono leading-relaxed text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 resize-y"
+                    placeholder={t("Instructions for the agent...")}
                   />
                 </div>
               </div>
@@ -166,57 +165,32 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
                   <div className="rounded-lg border border-border bg-card p-4 space-y-3">
                     <div className="space-y-2">
                       <label className="text-sm text-muted-foreground">Name</label>
-                      <Input
-                        placeholder="e.g. deepseek"
-                        value={newProviderName}
-                        onChange={e => setNewProviderName(e.target.value)}
-                        className="h-9 font-mono text-xs bg-background"
-                      />
+                      <Input placeholder="e.g. deepseek" value={newProviderName} onChange={e => setNewProviderName(e.target.value)} className="h-9 font-mono text-xs bg-background" />
                     </div>
                     <div className="space-y-2">
                       <label className="text-sm text-muted-foreground">Base URL</label>
-                      <Input
-                        placeholder="https://api.example.com/v1"
-                        value={newProviderUrl}
-                        onChange={e => setNewProviderUrl(e.target.value)}
-                        className="h-9 font-mono text-xs bg-background"
-                      />
+                      <Input placeholder="https://api.example.com/v1" value={newProviderUrl} onChange={e => setNewProviderUrl(e.target.value)} className="h-9 font-mono text-xs bg-background" />
                     </div>
                     <div className="space-y-2">
                       <label className="text-sm text-muted-foreground">Protocol</label>
-                      <select
-                        value={newProviderProtocol}
-                        onChange={e => setNewProviderProtocol(e.target.value)}
-                        className="flex h-9 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 appearance-none cursor-pointer"
-                      >
+                      <select value={newProviderProtocol} onChange={e => setNewProviderProtocol(e.target.value)} className="flex h-9 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground appearance-none cursor-pointer">
                         <option value="openai">OpenAI</option>
                         <option value="anthropic">Anthropic</option>
                       </select>
                     </div>
-                    <Button
-                      size="sm"
-                      onClick={handleAddProvider}
-                      disabled={!newProviderName.trim() || !newProviderUrl.trim()}
-                      className="w-full h-9 mt-1"
-                    >
+                    <Button size="sm" onClick={handleAddProvider} disabled={!newProviderName.trim() || !newProviderUrl.trim()} className="w-full h-9 mt-1">
                       Add Provider
                     </Button>
                   </div>
                 )}
-
                 {providerNames.map(name => (
                   <div key={name} className="rounded-lg border border-border bg-card overflow-hidden">
-                    {/* Provider header */}
                     <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/50">
                       <span className="text-sm font-medium text-foreground">{name}</span>
-                      <button
-                        onClick={() => handleDeleteProvider(name)}
-                        className="p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                      >
+                      <button onClick={() => handleDeleteProvider(name)} className="p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors">
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     </div>
-                    {/* Provider fields */}
                     <div className="p-4 space-y-3">
                       <div className="space-y-1.5">
                         <label className="text-xs text-muted-foreground">URL</label>
@@ -228,11 +202,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
                       </div>
                       <div className="space-y-1.5">
                         <label className="text-xs text-muted-foreground">Protocol</label>
-                        <select
-                          value={config.providers[name].protocol || "openai"}
-                          onChange={e => handleSet(`providers.${name}.protocol`, e.target.value)}
-                          className="flex h-8 w-full rounded-md border border-border bg-background px-3 text-xs text-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 appearance-none cursor-pointer"
-                        >
+                        <select value={config.providers[name].protocol || "openai"} onChange={e => handleSet(`providers.${name}.protocol`, e.target.value)} className="flex h-8 w-full rounded-md border border-border bg-background px-3 text-xs text-foreground appearance-none cursor-pointer">
                           <option value="openai">OpenAI</option>
                           <option value="anthropic">Anthropic</option>
                         </select>
@@ -253,10 +223,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
                 ) : (
                   config.hubs.map((hub, i) => (
                     <div key={i} className="flex items-center gap-3 p-3 rounded-md border border-border bg-card">
-                      <div className="relative shrink-0">
-                        <Globe className="w-4 h-4 text-muted-foreground" />
-                        <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-success border-2 border-card" />
-                      </div>
+                      <Globe className="w-4 h-4 text-muted-foreground shrink-0" />
                       <div className="flex-1 min-w-0">
                         <span className="text-sm font-medium text-foreground">{hub.name}</span>
                         <span className="block text-xs font-mono text-muted-foreground truncate">{hub.url}</span>
@@ -267,7 +234,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
               </div>
             </Section>
 
-            {/* Installed Packages */}
+            {/* Packages */}
             <Section title={t("Installed Packages")}>
               <div className="space-y-2">
                 {!config.installed || Object.keys(config.installed).length === 0 ? (
@@ -288,17 +255,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
               </div>
             </Section>
 
-            {/* System Prompt */}
-            <Section title={t("System Prompt")}>
-              <textarea
-                defaultValue={config.system_prompt}
-                onBlur={(e) => handleSet("system_prompt", e.target.value)}
-                className="w-full min-h-[200px] rounded-md border border-border bg-background p-3 text-sm font-mono leading-relaxed text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 resize-y"
-                placeholder={t("Instructions for the agent...")}
-              />
-            </Section>
-
-            {/* Danger zone */}
+            {/* Danger Zone */}
             <section className="pt-6 border-t border-border">
               <Button
                 variant="outline"
@@ -320,13 +277,8 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
           </div>
         </ScrollArea>
 
-        {/* Footer */}
         <div className="p-4 border-t border-border bg-card mt-auto">
-          <Button
-            className="w-full h-11 bg-primary text-primary-foreground hover:bg-primary/90"
-            onClick={() => onOpenChange(false)}
-            disabled={saving}
-          >
+          <Button className="w-full h-11 bg-primary text-primary-foreground hover:bg-primary/90" onClick={() => onOpenChange(false)} disabled={saving}>
             {saving ? t("Saving...") : t("Done")}
           </Button>
         </div>
@@ -347,20 +299,8 @@ function Section({ title, children, action }: { title: string; children: React.R
   );
 }
 
-function SettingInput({
-  value,
-  onSave,
-  placeholder,
-  mono,
-  small,
-  password,
-}: {
-  value: string;
-  onSave: (v: string) => void;
-  placeholder?: string;
-  mono?: boolean;
-  small?: boolean;
-  password?: boolean;
+function SettingInput({ value, onSave, placeholder, mono, small, password }: {
+  value: string; onSave: (v: string) => void; placeholder?: string; mono?: boolean; small?: boolean; password?: boolean;
 }) {
   const [local, setLocal] = useState(value);
   useEffect(() => setLocal(value), [value]);
@@ -371,13 +311,9 @@ function SettingInput({
       value={local}
       onChange={(e) => setLocal(e.target.value)}
       onBlur={() => { if (local !== value) onSave(local); }}
-      onKeyDown={(e) => { if (e.key === "Enter") { e.currentTarget.blur(); } }}
+      onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
       placeholder={placeholder}
-      className={cn(
-        "bg-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
-        mono && "font-mono",
-        small && "h-8 text-xs px-3"
-      )}
+      className={cn("bg-background", mono && "font-mono", small && "h-8 text-xs px-3")}
     />
   );
 }

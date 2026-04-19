@@ -1,25 +1,33 @@
-import type { Stream } from "@pinixai/core";
+import { listClips, type Stream } from "@pinixai/core";
 import { buildContext } from "./context";
 import {
   configDelete,
   configSet,
   configToJSON,
   loadConfig,
+  resolveAgentConfig,
 } from "./config";
 import {
+  createAgent,
   createRun,
   createTopic,
+  deleteAgent,
   deleteTopic,
   finishRun,
   getActiveRun,
   getActiveRunTopics,
+  getAgent,
   getRun,
+  getTopicAgent,
   injectMessage,
+  listAgents,
   listTopicsPage,
   loadMessagesPage,
   openDB,
   readRunOutput,
   saveMessages,
+  updateAgent,
+  type CreateAgentInput,
 } from "./db";
 import { advanceDueEvent, claimDueEvents } from "./events";
 import { ensureTopicDir, setCurrentTopic, withCurrentTopic } from "./fs";
@@ -35,6 +43,7 @@ import {
   type OutputFormat,
   readArgs,
   readStdin,
+  readStringField,
   readStdinText,
   resolveCreateTopicName,
   resolveIntegerFlag,
@@ -59,6 +68,7 @@ interface WebRun {
 }
 
 interface TopicResponse {
+  agent: { id: string; name: string; llm_model: string | null } | null;
   messages: WebMessage[];
   active_run: WebRun | null;
   has_more: boolean;
@@ -68,6 +78,8 @@ interface TopicResponse {
 interface WebTopic {
   id: string;
   name: string;
+  agent_id: string | null;
+  agent_name: string | null;
   message_count: number;
   created_at: number;
   last_message_at: number;
@@ -88,6 +100,7 @@ export function formatLegacyHelp(name: string, domain: string): string {
     "  bun run index.ts get-run <run-id>",
     "  bun run index.ts cancel-run <run-id>",
     "  bun run index.ts config [subcommand]",
+    "  bun run index.ts agent <create|list|get|update|delete>",
     "  bun run index.ts upload < stdin.json",
     "  bun run index.ts event-check [--limit 10]",
     "",
@@ -118,6 +131,10 @@ export class AgentClipCommands {
         return await this.runConfig(input);
       case "upload":
         return await this.runUpload(input);
+      case "agent":
+        return await this.runAgentCommand(input);
+      case "list-clips":
+        return await this.runListClips();
       default:
         throw new Error(`unknown command: ${commandName}`);
     }
@@ -141,6 +158,13 @@ export class AgentClipCommands {
         return await this.runConfigCLI(args, outputFormat);
       case "upload":
         return await this.runUploadCLI(args, outputFormat);
+      case "agent":
+        return await this.runAgentCLI(args, outputFormat);
+      case "list-clips": {
+        const out = createOutput(outputFormat);
+        out.result(await this.runListClips());
+        return 0;
+      }
       default:
         throw new Error(`unknown command: ${commandName}`);
     }
@@ -284,7 +308,7 @@ export class AgentClipCommands {
       return 0;
     }
 
-    const topicId = await ensureTopic(db, resolved.topicId, resolved.message, out);
+    const topicId = await ensureTopic(db, resolved.topicId, resolved.agentId, resolved.message, out);
     setCurrentTopic(topicId);
     ensureTopicDir(topicId);
 
@@ -339,7 +363,9 @@ export class AgentClipCommands {
 
   private async executeRunLoop(execution: RunExecution, out: Output): Promise<void> {
     const db = openDB();
-    const cfg = loadConfig();
+    const globalCfg = loadConfig();
+    const agent = getTopicAgent(db, execution.topicId);
+    const cfg = resolveAgentConfig(globalCfg, agent);
     const controller = new AbortController();
     registerRunController(execution.runId, controller);
     const signalHandler = () => controller.abort();
@@ -391,7 +417,8 @@ export class AgentClipCommands {
     if (!name) {
       throw new Error("name is required (-n or stdin JSON)");
     }
-    return createTopic(db, name);
+    const agentId = readStringField(input, ["agent_id", "agentId"]) || resolveFlag(readArgs(input), ["--agent", "-a"]);
+    return createTopic(db, name, agentId || undefined);
   }
 
   private async runListTopics(input: InvocationInput): Promise<WebTopic[]> {
@@ -403,6 +430,8 @@ export class AgentClipCommands {
     return topics.map((topic) => ({
       id: topic.id,
       name: topic.name,
+      agent_id: topic.agent_id,
+      agent_name: topic.agent_name,
       message_count: topic.message_count,
       created_at: topic.created_at,
       last_message_at: topic.last_message_at,
@@ -422,8 +451,10 @@ export class AgentClipCommands {
     const page = loadMessagesPage(db, topicId, limit, before);
     const messages = page.messages.map((message) => toWebMessage(topicId, message));
     const activeRun = before ? null : getActiveRun(db, topicId);
+    const agent = getTopicAgent(db, topicId);
 
     return {
+      agent: agent ? { id: agent.id, name: agent.name, llm_model: agent.llm_model } : null,
       messages,
       active_run: activeRun
         ? {
@@ -527,17 +558,125 @@ export class AgentClipCommands {
     }
     return uploadFile(JSON.parse(raw) as UploadInput);
   }
+
+  private async runListClips(): Promise<unknown> {
+    const clips = await listClips();
+    return clips.map((c) => ({
+      name: c.name,
+      package: c.package ?? "",
+      version: c.version ?? "",
+      commands: (c.commands ?? []).map((cmd) => cmd.name),
+    }));
+  }
+
+  private async runAgentCommand(input: InvocationInput): Promise<unknown> {
+    const args = readArgs(input);
+    if (args.length === 0) {
+      throw new Error("usage: agent <create|list|get|update|delete>");
+    }
+    const db = openDB();
+
+    switch (args[0]) {
+      case "create": {
+        const parsed = parseAgentFlags(args.slice(1));
+        if (!parsed.name) {
+          throw new Error("usage: agent create --name <name> [--model <model>] [--provider <provider>] [--max-tokens <n>] [--system-prompt <text>] [--scope clip1,clip2] [--pinned clip1,clip2]");
+        }
+        return createAgent(db, parsed);
+      }
+      case "list":
+        return listAgents(db);
+      case "get": {
+        const id = args[1] ?? resolvePositionalOrField(input, 1, ["id"]);
+        if (!id) throw new Error("usage: agent get <id>");
+        return getAgent(db, id);
+      }
+      case "update": {
+        const id = args[1];
+        if (!id) throw new Error("usage: agent update <id> [--name ...] [--model ...] ...");
+        const updates = parseAgentFlags(args.slice(2));
+        return updateAgent(db, id, updates);
+      }
+      case "delete": {
+        const id = args[1] ?? resolvePositionalOrField(input, 1, ["id"]);
+        if (!id) throw new Error("usage: agent delete <id>");
+        deleteAgent(db, id);
+        return { id, deleted: true };
+      }
+      default:
+        throw new Error(`unknown: agent ${args[0]}. Use: create|list|get|update|delete`);
+    }
+  }
+
+  private async runAgentCLI(args: string[], outputFormat: OutputFormat): Promise<number> {
+    const out = createOutput(outputFormat);
+    out.result(await this.runAgentCommand({ args, stdin: readStdinText() }));
+    return 0;
+  }
 }
 
-async function ensureTopic(db: ReturnType<typeof openDB>, topicId: string, message: string, out: Output): Promise<string> {
+async function ensureTopic(db: ReturnType<typeof openDB>, topicId: string, agentId: string, message: string, out: Output): Promise<string> {
   if (topicId) {
     return topicId;
   }
 
   const name = truncateRunes(message, 30) + (Array.from(message).length > 30 ? "..." : "");
-  const topic = createTopic(db, name || "new topic");
-  out.info(`[topic] ${topic.id} (${topic.name})`);
+  const topic = createTopic(db, name || "new topic", agentId || undefined);
+  const agentLabel = topic.agent_id ? ` [agent=${topic.agent_id}]` : "";
+  out.info(`[topic] ${topic.id} (${topic.name})${agentLabel}`);
   return topic.id;
+}
+
+function parseAgentFlags(args: string[]): CreateAgentInput & Record<string, unknown> {
+  const result: CreateAgentInput & Record<string, unknown> = { name: "" };
+
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    const next = args[i + 1];
+    switch (arg) {
+      case "--name":
+        result.name = next ?? "";
+        i += 1;
+        break;
+      case "--model":
+        result.llm_model = next;
+        i += 1;
+        break;
+      case "--provider":
+        result.llm_provider = next;
+        i += 1;
+        break;
+      case "--max-tokens":
+        result.max_tokens = next ? parseInt(next, 10) : undefined;
+        i += 1;
+        break;
+      case "--system-prompt":
+        result.system_prompt = next;
+        i += 1;
+        break;
+      case "--scope":
+        result.scope = next ? next.split(",").map((s) => s.trim()).filter(Boolean) : undefined;
+        i += 1;
+        break;
+      case "--pinned":
+        result.pinned = next ? next.split(",").map((s) => s.trim()).filter(Boolean) : undefined;
+        i += 1;
+        break;
+      default:
+        break;
+    }
+  }
+
+  return result;
+}
+
+function resolveFlag(args: string[], flags: string[]): string {
+  for (let i = 0; i < args.length; i += 1) {
+    if (flags.includes(args[i]) && args[i + 1]) {
+      return args[i + 1];
+    }
+  }
+  return "";
 }
 
 function extractSendError(chunks: string[], exitCode: number): string {

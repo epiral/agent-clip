@@ -62,6 +62,12 @@ class AgentClip extends Clip {
   @clipCommand("上传附件")
   upload = handler(InvocationSchema, AnyOutputSchema, async (input) => await this.runtime.executeCommand("upload", input));
 
+  @clipCommand("管理 Agent")
+  agent = handler(InvocationSchema, AnyOutputSchema, async (input) => await this.runtime.executeCommand("agent", input));
+
+  @clipCommand("列出可用 Clips")
+  ["list-clips"] = handler(InvocationSchema, AnyOutputSchema, async (input) => await this.runtime.executeCommand("list-clips", input));
+
   async start(): Promise<void> {
     ensureConfigExists();
 

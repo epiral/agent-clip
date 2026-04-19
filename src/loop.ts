@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Database } from "bun:sqlite";
-import type { Config } from "./config";
+import type { ResolvedConfig } from "./config";
 import type { ContextResult } from "./context";
 import { trackClipUsage } from "./context";
 import { drainInbox, tryFinishRun } from "./db";
@@ -21,7 +21,7 @@ export interface RunContext {
 }
 
 export async function runLoop(
-  cfg: Config,
+  cfg: ResolvedConfig,
   ctx: ContextResult,
   registry: Registry,
   out: Output,

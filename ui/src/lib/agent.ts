@@ -6,7 +6,58 @@
  */
 
 import { invoke, invokeStream, type StreamEvent } from "@pinixai/core/web";
-import type { Topic, Run, SendOptions, HistoryMessage, TokenUsage } from "./types";
+import type { Agent, CreateAgentInput, Topic, Run, SendOptions, HistoryMessage, TokenUsage } from "./types";
+
+// ─── Agents ───
+
+export async function listAgents(): Promise<Agent[]> {
+  return invoke<Agent[]>("agent", { args: ["list"] });
+}
+
+export async function createAgent(input: CreateAgentInput): Promise<Agent> {
+  const args: string[] = ["create", "--name", input.name];
+  if (input.llm_model) args.push("--model", input.llm_model);
+  if (input.llm_provider) args.push("--provider", input.llm_provider);
+  if (input.max_tokens) args.push("--max-tokens", String(input.max_tokens));
+  if (input.system_prompt) args.push("--system-prompt", input.system_prompt);
+  if (input.scope?.length) args.push("--scope", input.scope.join(","));
+  if (input.pinned?.length) args.push("--pinned", input.pinned.join(","));
+  return invoke<Agent>("agent", { args });
+}
+
+export async function getAgent(id: string): Promise<Agent> {
+  return invoke<Agent>("agent", { args: ["get", id] });
+}
+
+export async function updateAgent(id: string, updates: Partial<CreateAgentInput>): Promise<Agent> {
+  const args: string[] = ["update", id];
+  if (updates.name) args.push("--name", updates.name);
+  if (updates.llm_model !== undefined) args.push("--model", updates.llm_model || "");
+  if (updates.llm_provider !== undefined) args.push("--provider", updates.llm_provider || "");
+  if (updates.max_tokens !== undefined) args.push("--max-tokens", String(updates.max_tokens || 0));
+  if (updates.system_prompt !== undefined) args.push("--system-prompt", updates.system_prompt || "");
+  if (updates.scope !== undefined) args.push("--scope", updates.scope?.join(",") || "");
+  if (updates.pinned !== undefined) args.push("--pinned", updates.pinned?.join(",") || "");
+  return invoke<Agent>("agent", { args });
+}
+
+export async function deleteAgent(id: string): Promise<void> {
+  await invoke("agent", { args: ["delete", id] });
+}
+
+// ─── Clips ───
+
+export interface ClipInfo {
+  name: string;
+  package: string;
+  version: string;
+  domain: string;
+  commands: string[];
+}
+
+export async function listClips(): Promise<ClipInfo[]> {
+  return invoke<ClipInfo[]>("list-clips");
+}
 
 // ─── Topics ───
 
@@ -14,13 +65,14 @@ export async function listTopics(): Promise<Topic[]> {
   return invoke<Topic[]>("list-topics");
 }
 
-export async function createTopic(name: string): Promise<Topic> {
-  return invoke<Topic>("create-topic", {
-    args: ["-n", name],
-  });
+export async function createTopic(name: string, agentId?: string): Promise<Topic> {
+  const args: string[] = ["-n", name];
+  if (agentId) args.push("--agent", agentId);
+  return invoke<Topic>("create-topic", { args });
 }
 
 export interface TopicResponse {
+  agent: { id: string; name: string; llm_model: string | null } | null;
   messages: HistoryMessage[];
   active_run: {
     id: string;
@@ -106,6 +158,7 @@ export function send(
       message,
       topic_id: options.topicId,
       run_id: options.runId,
+      agent_id: options.agentId,
       attachments: options.attachments,
     });
     return invokeStream(
@@ -121,6 +174,7 @@ export function send(
   const args: string[] = ["-p", message, "--output", "jsonl"];
   if (options.topicId) args.push("-t", options.topicId);
   if (options.runId) args.push("-r", options.runId);
+  if (options.agentId) args.push("-a", options.agentId);
   if (options.async) args.push("--async");
 
   return invokeStream(

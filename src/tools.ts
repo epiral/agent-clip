@@ -3,6 +3,7 @@ import { Database } from 'bun:sqlite';
 import { parseChain, Operator } from './chain';
 import {
   type Config,
+  type ResolvedConfig,
   addPinnedClip,
   configDelete,
   configSet,
@@ -271,18 +272,18 @@ export function runToolDef(commands: Record<string, string>): ToolDef {
   };
 }
 
-export async function buildRegistry(db: Database, cfg: Config): Promise<Registry> {
+export async function buildRegistry(db: Database, cfg: ResolvedConfig): Promise<Registry> {
   const registry = new Registry();
   registerMemoryCommands(registry.register.bind(registry), db, cfg);
   registerTopicCommands(registry.register.bind(registry), db, cfg);
   registerEventCommands(registry.register.bind(registry), db);
   registerConfigCommands(registry.register.bind(registry));
   registerPkgCommands(registry, cfg);
-  await registerAllRuntimeClipCommands(registry);
+  await registerAllRuntimeClipCommands(registry, cfg.scope);
   return registry;
 }
 
-function registerMemoryCommands(register: RegisterFn, db: Database, cfg: Config): void {
+function registerMemoryCommands(register: RegisterFn, db: Database, cfg: ResolvedConfig): void {
   register(
     'memory',
     [
@@ -340,7 +341,7 @@ function registerMemoryCommands(register: RegisterFn, db: Database, cfg: Config)
   );
 }
 
-function registerTopicCommands(register: RegisterFn, db: Database, cfg: Config): void {
+function registerTopicCommands(register: RegisterFn, db: Database, cfg: ResolvedConfig): void {
   register(
     'topic',
     [
@@ -367,7 +368,8 @@ function registerTopicCommands(register: RegisterFn, db: Database, cfg: Config):
           const topics = listTopicsPage(db, limit, 0);
           const lines = [`Topics (${topics.length} of ${total}, newest first):`];
           for (const topic of topics) {
-            lines.push(`  ${topic.id}  ${topic.name}  (${topic.message_count} msgs)  ${formatShortDate(topic.created_at)}`);
+            const agentLabel = topic.agent_name ? `  [${topic.agent_name}]` : '';
+            lines.push(`  ${topic.id}  ${topic.name}${agentLabel}  (${topic.message_count} msgs)  ${formatShortDate(topic.created_at)}`);
           }
           return lines.join('\n');
         }
@@ -515,12 +517,12 @@ function registerConfigCommands(register: RegisterFn): void {
   );
 }
 
-function registerPkgCommands(registry: Registry, cfg: Config): void {
+function registerPkgCommands(registry: Registry, cfg: ResolvedConfig): void {
   registry.register(
     'pkg',
     [
       'Manage clips and pinning.',
-      '  pkg list                          — list ALL runtime clips (marks pinned)',
+      '  pkg list                          — list runtime clips (marks pinned)',
       '  pkg search <query>                — search the Registry for clips',
       '  pkg pin <clip>                    — pin a clip to system prompt context',
       '  pkg unpin <clip>                  — unpin a clip from context',
@@ -539,7 +541,7 @@ function registerPkgCommands(registry: Registry, cfg: Config): void {
         case 'unpin':
           return pkgUnpin(cfg, args.slice(1));
         case 'info':
-          return pkgInfo(args.slice(1));
+          return pkgInfo(cfg, args.slice(1));
         default:
           throw new Error(`unknown: pkg ${args[0]}. Use: list|search|pin|unpin|info`);
       }
@@ -547,15 +549,19 @@ function registerPkgCommands(registry: Registry, cfg: Config): void {
   );
 }
 
-async function pkgList(cfg: Config): Promise<string> {
+async function pkgList(cfg: ResolvedConfig): Promise<string> {
   try {
-    const clips = await listClips();
+    let clips = await listClips();
+    if (cfg.scope) {
+      const scopeSet = new Set(cfg.scope);
+      clips = clips.filter((c) => scopeSet.has(c.name));
+    }
     if (clips.length === 0) {
       return 'No clips found.';
     }
 
     const pinnedSet = new Set(cfg.pinned);
-    const lines = [`${clips.length} clip(s):`];
+    const lines = [`${clips.length} clip(s)${cfg.scope ? ' (scoped)' : ''}:`];
     for (const clip of clips) {
       const cmds = (clip.commands ?? []).map((c) => c.name).join(', ');
       const pinLabel = pinnedSet.has(clip.name) ? ' (pinned)' : '';
@@ -599,11 +605,18 @@ async function pkgSearch(args: string[]): Promise<string> {
   }
 }
 
-function pkgPin(cfg: Config, args: string[]): string {
+function checkScope(cfg: ResolvedConfig, name: string): void {
+  if (cfg.scope && !cfg.scope.includes(name)) {
+    throw new Error(`clip "${name}" is not in this agent's scope`);
+  }
+}
+
+function pkgPin(cfg: ResolvedConfig, args: string[]): string {
   const name = args[0];
   if (!name) {
     throw new Error('usage: pkg pin <clip>');
   }
+  checkScope(cfg, name);
   if (cfg.pinned.includes(name)) {
     return `"${name}" is already pinned.`;
   }
@@ -612,11 +625,12 @@ function pkgPin(cfg: Config, args: string[]): string {
   return `Pinned "${name}". Its info will appear in system prompt.`;
 }
 
-function pkgUnpin(cfg: Config, args: string[]): string {
+function pkgUnpin(cfg: ResolvedConfig, args: string[]): string {
   const name = args[0];
   if (!name) {
     throw new Error('usage: pkg unpin <clip>');
   }
+  checkScope(cfg, name);
   removePinnedClip(name);
   const idx = cfg.pinned.indexOf(name);
   if (idx !== -1) {
@@ -625,12 +639,13 @@ function pkgUnpin(cfg: Config, args: string[]): string {
   return `Unpinned "${name}".`;
 }
 
-async function pkgInfo(args: string[]): Promise<string> {
+async function pkgInfo(cfg: ResolvedConfig, args: string[]): Promise<string> {
   if (args.length === 0) {
     throw new Error('usage: pkg info <clip>');
   }
 
   const name = args[0];
+  checkScope(cfg, name);
 
   let clipInfo: RuntimeClipInfo | undefined;
   try {
@@ -640,35 +655,33 @@ async function pkgInfo(args: string[]): Promise<string> {
     // IPC unavailable
   }
 
-  const lines = [`Clip: ${name}`];
+  return clipInfo ? formatClipInfo(clipInfo) : `Clip: ${name}\n(not found in runtime — clip may not be running)`;
+}
 
-  if (clipInfo) {
-    if (clipInfo.package) lines.push(`Package: ${clipInfo.package}`);
-    if (clipInfo.version) lines.push(`Version: ${clipInfo.version}`);
-    if ((clipInfo.commands ?? []).length > 0) {
-      lines.push('', 'Commands:');
-      for (const cmd of clipInfo.commands ?? []) {
-        lines.push(`  ${cmd.name}${cmd.description ? ` — ${cmd.description}` : ''}`);
-        if (cmd.input) {
-          try {
-            const schema = JSON.parse(cmd.input);
-            const props = schema.properties || {};
-            const required = new Set(schema.required || []);
-            const params = Object.entries(props).map(([k, v]: [string, any]) => {
-              const req = required.has(k) ? '' : '?';
-              const type = v.type || 'any';
-              const desc = v.description ? ` (${v.description})` : '';
-              return `      --${k}${req}: ${type}${desc}`;
-            });
-            if (params.length > 0) lines.push(...params);
-          } catch {}
-        }
+function formatClipInfo(clip: RuntimeClipInfo): string {
+  const lines = [`Clip: ${clip.name}`];
+  if (clip.package) lines.push(`Package: ${clip.package}`);
+  if (clip.version) lines.push(`Version: ${clip.version}`);
+  if ((clip.commands ?? []).length > 0) {
+    lines.push('', 'Commands:');
+    for (const cmd of clip.commands ?? []) {
+      lines.push(`  ${cmd.name}${cmd.description ? ` — ${cmd.description}` : ''}`);
+      if (cmd.input) {
+        try {
+          const schema = JSON.parse(cmd.input);
+          const props = schema.properties || {};
+          const required = new Set(schema.required || []);
+          const params = Object.entries(props).map(([k, v]: [string, any]) => {
+            const req = required.has(k) ? '' : '?';
+            const type = v.type || 'any';
+            const desc = v.description ? ` (${v.description})` : '';
+            return `      --${k}${req}: ${type}${desc}`;
+          });
+          if (params.length > 0) lines.push(...params);
+        } catch {}
       }
     }
-  } else {
-    lines.push('(not found in runtime — clip may not be running)');
   }
-
   return lines.join('\n');
 }
 
@@ -676,7 +689,7 @@ async function pkgInfo(args: string[]): Promise<string> {
  * Register ALL runtime clips as top-level commands.
  * Each clip's alias becomes a command that forwards subcommands via IPC invokeClip().
  */
-async function registerAllRuntimeClipCommands(registry: Registry): Promise<void> {
+async function registerAllRuntimeClipCommands(registry: Registry, scope: string[] | null): Promise<void> {
   let clips: RuntimeClipInfo[] = [];
   try {
     clips = await Promise.race([
@@ -686,8 +699,12 @@ async function registerAllRuntimeClipCommands(registry: Registry): Promise<void>
       ),
     ]);
   } catch {
-    // IPC unavailable at startup — no clips registered
     return;
+  }
+
+  if (scope) {
+    const scopeSet = new Set(scope);
+    clips = clips.filter((c) => scopeSet.has(c.name));
   }
 
   for (const clip of clips) {
@@ -703,7 +720,7 @@ function registerSingleClipCommand(registry: Registry, clip: RuntimeClipInfo): v
     `${desc}. Run "${clip.name} <command> [--param value]" or "${clip.name} --help".`,
     async (args, stdin) => {
       if (args.length === 0 || args[0] === '--help' || args[0] === '-h') {
-        return pkgInfo([clip.name]);
+        return formatClipInfo(clip);
       }
 
       const command = args[0];

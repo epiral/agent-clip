@@ -225,7 +225,7 @@ export function useChat() {
   }, [currentTopicId, isLoadingMore, hasMore]);
 
   // ─── Send message ───
-  const send = useCallback((message: string, topicId?: string, files?: File[]) => {
+  const send = useCallback((message: string, topicId?: string, files?: File[], agentId?: string) => {
     const targetTopicId = topicId ?? currentTopicId ?? undefined;
 
     // Build user message blocks (text + image previews)
@@ -276,7 +276,7 @@ export function useChat() {
 
     // Upload files first (if any), then send with attachment paths
     const doSend = (attachments?: string[], overrideTopicId?: string) => {
-      return agent.send(message, { topicId: overrideTopicId ?? targetTopicId, attachments }, {
+      return agent.send(message, { topicId: overrideTopicId ?? targetTopicId, agentId, attachments }, {
       onInfo: (info) => {
         const match = info.match(/\[topic\]\s+(\S+)/);
         if (match) {

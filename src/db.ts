@@ -72,13 +72,14 @@ export function openDB(): Database {
     "ALTER TABLE events ADD COLUMN last_run_at INTEGER",
     "ALTER TABLE events ADD COLUMN canceled_at INTEGER",
     "ALTER TABLE messages ADD COLUMN usage TEXT",
+    "ALTER TABLE topics ADD COLUMN agent_id TEXT REFERENCES agents(id)",
   ];
   for (const statement of migrations) {
     try {
       db.exec(statement);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (!message.includes("duplicate column name")) {
+      if (!message.includes("duplicate column name") && !message.includes("already exists")) {
         throw error;
       }
     }
@@ -132,28 +133,181 @@ function migrateEmbeddingsToVec(db: Database): void {
   }
 }
 
+// --- Agents ---
+
+export interface Agent {
+  id: string;
+  name: string;
+  llm_provider: string | null;
+  llm_model: string | null;
+  max_tokens: number | null;
+  system_prompt: string | null;
+  scope: string[] | null;
+  pinned: string[] | null;
+  created_at: number;
+  updated_at: number;
+}
+
+type AgentRow = {
+  id: string;
+  name: string;
+  llm_provider: string | null;
+  llm_model: string | null;
+  max_tokens: number | null;
+  system_prompt: string | null;
+  scope: string | null;
+  pinned: string | null;
+  created_at: number;
+  updated_at: number;
+};
+
+function toAgent(row: AgentRow): Agent {
+  return {
+    id: row.id,
+    name: row.name,
+    llm_provider: row.llm_provider,
+    llm_model: row.llm_model,
+    max_tokens: row.max_tokens,
+    system_prompt: row.system_prompt,
+    scope: row.scope ? JSON.parse(row.scope) as string[] : null,
+    pinned: row.pinned ? JSON.parse(row.pinned) as string[] : null,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}
+
+export interface CreateAgentInput {
+  name: string;
+  llm_provider?: string;
+  llm_model?: string;
+  max_tokens?: number;
+  system_prompt?: string;
+  scope?: string[];
+  pinned?: string[];
+}
+
+export function createAgent(db: Database, input: CreateAgentInput): Agent {
+  const now = nowUnix();
+  const agent: Agent = {
+    id: randomID(),
+    name: input.name,
+    llm_provider: input.llm_provider ?? null,
+    llm_model: input.llm_model ?? null,
+    max_tokens: input.max_tokens ?? null,
+    system_prompt: input.system_prompt ?? null,
+    scope: input.scope ?? null,
+    pinned: input.pinned ?? null,
+    created_at: now,
+    updated_at: now,
+  };
+  db.query(
+    `INSERT INTO agents (id, name, llm_provider, llm_model, max_tokens, system_prompt, scope, pinned, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    agent.id, agent.name, agent.llm_provider, agent.llm_model, agent.max_tokens,
+    agent.system_prompt, agent.scope ? JSON.stringify(agent.scope) : null,
+    agent.pinned ? JSON.stringify(agent.pinned) : null, agent.created_at, agent.updated_at,
+  );
+  return agent;
+}
+
+export function getAgent(db: Database, id: string): Agent {
+  const row = db.query<AgentRow, [string]>(
+    `SELECT id, name, llm_provider, llm_model, max_tokens, system_prompt, scope, pinned, created_at, updated_at
+     FROM agents WHERE id = ?`,
+  ).get(id);
+  if (!row) {
+    throw new Error(`agent ${id} not found`);
+  }
+  return toAgent(row);
+}
+
+export function listAgents(db: Database): Agent[] {
+  return db.query<AgentRow, []>(
+    `SELECT id, name, llm_provider, llm_model, max_tokens, system_prompt, scope, pinned, created_at, updated_at
+     FROM agents ORDER BY created_at ASC`,
+  ).all().map(toAgent);
+}
+
+export function updateAgent(db: Database, id: string, updates: Partial<CreateAgentInput>): Agent {
+  const sets: string[] = [];
+  const values: (string | number | null)[] = [];
+
+  if (updates.name !== undefined) { sets.push("name = ?"); values.push(updates.name); }
+  if (updates.llm_provider !== undefined) { sets.push("llm_provider = ?"); values.push(updates.llm_provider || null); }
+  if (updates.llm_model !== undefined) { sets.push("llm_model = ?"); values.push(updates.llm_model || null); }
+  if (updates.max_tokens !== undefined) { sets.push("max_tokens = ?"); values.push(updates.max_tokens || null); }
+  if (updates.system_prompt !== undefined) { sets.push("system_prompt = ?"); values.push(updates.system_prompt || null); }
+  if (updates.scope !== undefined) { sets.push("scope = ?"); values.push(updates.scope ? JSON.stringify(updates.scope) : null); }
+  if (updates.pinned !== undefined) { sets.push("pinned = ?"); values.push(updates.pinned ? JSON.stringify(updates.pinned) : null); }
+
+  if (sets.length === 0) {
+    return getAgent(db, id);
+  }
+
+  sets.push("updated_at = ?");
+  values.push(nowUnix());
+  values.push(id);
+
+  const result = db.query(`UPDATE agents SET ${sets.join(", ")} WHERE id = ?`).run(...values);
+  if (!result.changes) {
+    throw new Error(`agent ${id} not found`);
+  }
+  return getAgent(db, id);
+}
+
+export function deleteAgent(db: Database, id: string): void {
+  const topics = db.query<{ c: number }, [string]>(
+    "SELECT COUNT(*) AS c FROM topics WHERE agent_id = ?",
+  ).get(id);
+  if (topics && topics.c > 0) {
+    throw new Error(`agent ${id} has ${topics.c} topic(s), delete them first or reassign`);
+  }
+  const result = db.query("DELETE FROM agents WHERE id = ?").run(id);
+  if (!result.changes) {
+    throw new Error(`agent ${id} not found`);
+  }
+}
+
+export function getTopicAgent(db: Database, topicId: string): Agent | null {
+  const row = db.query<AgentRow, [string]>(
+    `SELECT a.id, a.name, a.llm_provider, a.llm_model, a.max_tokens, a.system_prompt, a.scope, a.pinned, a.created_at, a.updated_at
+     FROM agents a JOIN topics t ON t.agent_id = a.id WHERE t.id = ?`,
+  ).get(topicId);
+  return row ? toAgent(row) : null;
+}
+
+// --- Topics ---
+
 export interface Topic {
   id: string;
   name: string;
+  agent_id: string | null;
   created_at: number;
 }
 
 export interface TopicSummary {
   id: string;
   name: string;
+  agent_id: string | null;
+  agent_name: string | null;
   message_count: number;
   created_at: number;
   last_message_at: number;
   has_active_run?: boolean;
 }
 
-export function createTopic(db: Database, name: string): Topic {
+export function createTopic(db: Database, name: string, agentId?: string): Topic {
+  if (agentId) {
+    getAgent(db, agentId);
+  }
   const topic: Topic = {
     id: randomID(),
     name,
+    agent_id: agentId ?? null,
     created_at: nowUnix(),
   };
-  db.query("INSERT INTO topics (id, name, created_at) VALUES (?, ?, ?)").run(topic.id, topic.name, topic.created_at);
+  db.query("INSERT INTO topics (id, name, agent_id, created_at) VALUES (?, ?, ?, ?)").run(topic.id, topic.name, topic.agent_id, topic.created_at);
   ensureTopicDir(topic.id);
   return topic;
 }
@@ -165,10 +319,11 @@ export function countTopics(db: Database): number {
 
 export function listTopicsPage(db: Database, limit = 0, offset = 0): TopicSummary[] {
   const query = `
-    SELECT t.id, t.name, t.created_at, COUNT(m.id) AS message_count,
+    SELECT t.id, t.name, t.agent_id, a.name AS agent_name, t.created_at, COUNT(m.id) AS message_count,
       COALESCE(MAX(m.created_at), t.created_at) AS last_message_at
     FROM topics t
     LEFT JOIN messages m ON m.topic_id = t.id
+    LEFT JOIN agents a ON a.id = t.agent_id
     GROUP BY t.id
     ORDER BY last_message_at DESC
     ${limit > 0 ? "LIMIT ? OFFSET ?" : ""}
@@ -186,7 +341,7 @@ export function renameTopic(db: Database, id: string, name: string): void {
 }
 
 export function getTopic(db: Database, id: string): Topic {
-  const topic = db.query<Topic, [string]>("SELECT id, name, created_at FROM topics WHERE id = ?").get(id);
+  const topic = db.query<Topic, [string]>("SELECT id, name, agent_id, created_at FROM topics WHERE id = ?").get(id);
   if (!topic) {
     throw new Error(`topic ${id} not found`);
   }

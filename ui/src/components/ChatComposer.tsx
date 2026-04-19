@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { ArrowUp, Square, Paperclip, X } from "lucide-react";
+import { ArrowUp, Square, Paperclip, X, Bot } from "lucide-react";
 import { useI18n } from "../lib/i18n";
 import type { FileAttachment } from "../lib/types";
 
@@ -8,35 +8,29 @@ interface ChatComposerProps {
   onCancel: () => void;
   isStreaming: boolean;
   agentName?: string;
+  selectedAgent?: { name: string } | null;
+  onDeselectAgent?: () => void;
 }
 
 const IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp", "image/svg+xml"];
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
-export function ChatComposer({ onSend, onCancel, isStreaming, agentName }: ChatComposerProps) {
+export function ChatComposer({ onSend, onCancel, isStreaming, agentName, selectedAgent, onDeselectAgent }: ChatComposerProps) {
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<FileAttachment[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { t } = useI18n();
 
-  // Auto-resize textarea
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
-      textareaRef.current.style.height = `${Math.min(
-        textareaRef.current.scrollHeight,
-        240
-      )}px`;
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 240)}px`;
     }
   }, [input]);
 
-  // Cleanup object URLs on unmount
   useEffect(() => {
-    return () => {
-      attachments.forEach(a => URL.revokeObjectURL(a.preview));
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => { attachments.forEach(a => URL.revokeObjectURL(a.preview)); };
   }, []);
 
   const addFiles = useCallback((files: FileList | File[]) => {
@@ -44,14 +38,9 @@ export function ChatComposer({ onSend, onCancel, isStreaming, agentName }: ChatC
     for (const file of Array.from(files)) {
       if (!IMAGE_TYPES.includes(file.type)) continue;
       if (file.size > MAX_FILE_SIZE) continue;
-      newAttachments.push({
-        file,
-        preview: URL.createObjectURL(file),
-      });
+      newAttachments.push({ file, preview: URL.createObjectURL(file) });
     }
-    if (newAttachments.length > 0) {
-      setAttachments(prev => [...prev, ...newAttachments]);
-    }
+    if (newAttachments.length > 0) setAttachments(prev => [...prev, ...newAttachments]);
   }, []);
 
   const removeAttachment = useCallback((index: number) => {
@@ -93,24 +82,16 @@ export function ChatComposer({ onSend, onCancel, isStreaming, agentName }: ChatC
 
   const [isDragging, setIsDragging] = useState(false);
 
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-  }, []);
-
-  const handleDragLeave = useCallback(() => {
-    setIsDragging(false);
-  }, []);
-
+  const handleDragOver = useCallback((e: React.DragEvent) => { e.preventDefault(); setIsDragging(true); }, []);
+  const handleDragLeave = useCallback(() => { setIsDragging(false); }, []);
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    if (e.dataTransfer.files.length > 0) {
-      addFiles(e.dataTransfer.files);
-    }
+    if (e.dataTransfer.files.length > 0) addFiles(e.dataTransfer.files);
   }, [addFiles]);
 
   const hasContent = input.trim() || attachments.length > 0;
+  const placeholderName = selectedAgent?.name ?? agentName ?? "Agent";
 
   return (
     <div
@@ -119,16 +100,27 @@ export function ChatComposer({ onSend, onCancel, isStreaming, agentName }: ChatC
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
+      {/* Agent indicator tag */}
+      {selectedAgent && (
+        <div className="flex items-center gap-1.5 px-4 pt-2.5">
+          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-primary bg-primary/8 px-2 py-0.5 rounded-md">
+            <Bot className="w-3 h-3" />
+            {selectedAgent.name}
+            {onDeselectAgent && (
+              <button onClick={onDeselectAgent} className="ml-0.5 hover:text-primary/70 transition-colors">
+                <X className="w-3 h-3" />
+              </button>
+            )}
+          </span>
+        </div>
+      )}
+
       {attachments.length > 0 && (
         <div className="flex gap-3 px-4 pt-3 overflow-x-auto no-scrollbar">
           {attachments.map((att, i) => (
             <div key={att.preview} className="relative shrink-0 group/thumb">
               <div className="relative h-16 w-16 rounded-md border border-border overflow-hidden">
-                <img
-                  src={att.preview}
-                  alt={att.file.name}
-                  className="h-full w-full object-cover"
-                />
+                <img src={att.preview} alt={att.file.name} className="h-full w-full object-cover" />
               </div>
               <button
                 type="button"
@@ -151,17 +143,7 @@ export function ChatComposer({ onSend, onCancel, isStreaming, agentName }: ChatC
         >
           <Paperclip className="h-4.5 w-4.5" />
         </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          multiple
-          className="hidden"
-          onChange={(e) => {
-            if (e.target.files) addFiles(e.target.files);
-            e.target.value = "";
-          }}
-        />
+        <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => { if (e.target.files) addFiles(e.target.files); e.target.value = ""; }} />
 
         <textarea
           ref={textareaRef}
@@ -169,24 +151,21 @@ export function ChatComposer({ onSend, onCancel, isStreaming, agentName }: ChatC
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
-          placeholder={t("Ask {name} anything...", { name: agentName || "Agent" })}
+          placeholder={t("Ask {name} anything...", { name: placeholderName })}
           className="flex-1 min-h-[40px] max-h-[240px] resize-none border-none bg-transparent focus:ring-0 focus:outline-none px-2 py-2 text-[16px] md:text-sm leading-relaxed placeholder:text-muted-foreground/50 no-scrollbar"
           rows={1}
         />
 
         <div className="flex items-center h-[40px]">
           {isStreaming ? (
-            <button
-              onClick={onCancel}
-              className="p-2 rounded-md text-destructive hover:bg-destructive/10 transition-colors"
-            >
+            <button onClick={onCancel} className="p-2 rounded-md text-destructive hover:bg-destructive/10 transition-colors">
               <Square className="h-4 w-4 fill-current" />
             </button>
           ) : (
             <button
               onClick={handleSend}
               disabled={!hasContent}
-              className="bg-primary text-primary-foreground text-xs font-semibold uppercase tracking-wider px-4 py-2 rounded-md hover:bg-primary/90 active:bg-primary/80 transition-colors disabled:opacity-40 h-9 w-9 p-0 flex items-center justify-center rounded-lg"
+              className="bg-primary text-primary-foreground rounded-lg h-9 w-9 flex items-center justify-center hover:bg-primary/90 active:bg-primary/80 transition-colors disabled:opacity-40"
             >
               <ArrowUp className="h-4.5 w-4.5" />
             </button>

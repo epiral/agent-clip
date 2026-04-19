@@ -1,8 +1,33 @@
 /** Data types matching backend Go structs */
 
+export interface Agent {
+  id: string;
+  name: string;
+  llm_provider: string | null;
+  llm_model: string | null;
+  max_tokens: number | null;
+  system_prompt: string | null;
+  scope: string[] | null;
+  pinned: string[] | null;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface CreateAgentInput {
+  name: string;
+  llm_provider?: string;
+  llm_model?: string;
+  max_tokens?: number;
+  system_prompt?: string;
+  scope?: string[];
+  pinned?: string[];
+}
+
 export interface Topic {
   id: string;
   name: string;
+  agent_id: string | null;
+  agent_name: string | null;
   message_count: number;
   created_at: number;
   last_message_at: number;
@@ -22,6 +47,7 @@ export interface Run {
 export interface SendOptions {
   topicId?: string;
   runId?: string;
+  agentId?: string;
   async?: boolean;
   attachments?: string[];
 }
