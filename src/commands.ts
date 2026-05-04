@@ -57,6 +57,7 @@ interface RunExecution {
   topicId: string;
   message: string;
   attachments: string[];
+  context: string;
 }
 
 interface WebRun {
@@ -205,6 +206,7 @@ export class AgentClipCommands {
         topicId: event.topic_id,
         message: event.run_message,
         attachments: [],
+        context: "",
       });
       activeTopics[event.topic_id] = true;
       triggered += 1;
@@ -330,6 +332,7 @@ export class AgentClipCommands {
         topicId,
         message: resolved.message,
         attachments: resolved.attachments,
+        context: resolved.context,
       });
 
       out.info(`[run] ${run.id} started (async)`);
@@ -347,6 +350,7 @@ export class AgentClipCommands {
           topicId,
           message: resolved.message,
           attachments: resolved.attachments,
+          context: resolved.context,
         },
         out,
       );
@@ -379,7 +383,7 @@ export class AgentClipCommands {
         const message = execution.attachments.length > 0
           ? appendAttachments(execution.message, execution.attachments)
           : execution.message;
-        const ctx = await buildContext(db, cfg, execution.topicId, message);
+        const ctx = await buildContext(db, cfg, execution.topicId, message, execution.context || undefined);
         const images = readImageAttachments(execution.attachments);
         const lastMessage = ctx.messages.at(-1);
         if (images.length > 0 && lastMessage) {

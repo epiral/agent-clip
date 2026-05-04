@@ -20,6 +20,7 @@ export interface SendJSONInput {
   run_id?: string;
   agent_id?: string;
   attachments?: string[];
+  context?: string;
 }
 
 export interface ResolvedSendInput {
@@ -28,6 +29,7 @@ export interface ResolvedSendInput {
   runId: string;
   agentId: string;
   attachments: string[];
+  context: string;
   isAsync: boolean;
 }
 
@@ -61,6 +63,7 @@ export function resolveSendInput(input: InvocationInput): ResolvedSendInput {
   let runId = readStringField(input, ["run_id", "runId"]);
   let agentId = readStringField(input, ["agent_id", "agentId"]);
   let attachments = readStringArrayField(input, ["attachments"]);
+  let context = readStringField(input, ["context"]);
   let isAsync = readBooleanField(input, ["async"]) ?? false;
 
   for (let index = 0; index < args.length; index += 1) {
@@ -84,6 +87,11 @@ export function resolveSendInput(input: InvocationInput): ResolvedSendInput {
       case "-a":
       case "--agent":
         agentId = args[index + 1] ?? agentId;
+        index += 1;
+        break;
+      case "-c":
+      case "--context":
+        context = args[index + 1] ?? context;
         index += 1;
         break;
       case "--async":
@@ -114,6 +122,9 @@ export function resolveSendInput(input: InvocationInput): ResolvedSendInput {
       if (attachments.length === 0) {
         attachments = Array.isArray(parsed.attachments) ? parsed.attachments : [];
       }
+      if (!context) {
+        context = parsed.context ?? "";
+      }
     }
   }
 
@@ -123,6 +134,7 @@ export function resolveSendInput(input: InvocationInput): ResolvedSendInput {
     runId,
     agentId,
     attachments,
+    context,
     isAsync,
   };
 }

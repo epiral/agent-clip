@@ -88,7 +88,7 @@ export interface ContextResult {
   messages: Message[];
 }
 
-export async function buildContext(db: Database, cfg: ResolvedConfig, topicId: string, userMessage: string): Promise<ContextResult> {
+export async function buildContext(db: Database, cfg: ResolvedConfig, topicId: string, userMessage: string, callerContext?: string): Promise<ContextResult> {
   advanceRound();
 
   let systemPrompt = cfg.name ? `你是 ${cfg.name}。\n\n` : "";
@@ -104,7 +104,7 @@ export async function buildContext(db: Database, cfg: ResolvedConfig, topicId: s
   if (completedRuns.length === 0) {
     return {
       systemPrompt,
-      messages: [await wrapUserMessage(cfg, db, userMessage)],
+      messages: [await wrapUserMessage(cfg, db, userMessage, callerContext)],
     };
   }
 
@@ -128,11 +128,11 @@ export async function buildContext(db: Database, cfg: ResolvedConfig, topicId: s
     messages.push(...loadMessagesByRunID(db, run.id));
   }
 
-  messages.push(await wrapUserMessage(cfg, db, userMessage));
+  messages.push(await wrapUserMessage(cfg, db, userMessage, callerContext));
   return { systemPrompt, messages };
 }
 
-async function wrapUserMessage(cfg: ResolvedConfig, db: Database, userMessage: string): Promise<Message> {
+async function wrapUserMessage(cfg: ResolvedConfig, db: Database, userMessage: string, callerContext?: string): Promise<Message> {
   let content = `<user>\n${userMessage}\n</user>`;
 
   const recall = await buildRecall(db, cfg, userMessage);
@@ -140,7 +140,7 @@ async function wrapUserMessage(cfg: ResolvedConfig, db: Database, userMessage: s
     content += `\n\n<recall>\n${recall}</recall>`;
   }
 
-  const environment = buildEnvironment(cfg);
+  const environment = buildEnvironment(cfg, callerContext);
   if (environment) {
     content += `\n\n<environment>\n${environment}</environment>`;
   }
@@ -167,7 +167,7 @@ async function buildRecall(db: Database, cfg: ResolvedConfig, userMessage: strin
     .join("\n");
 }
 
-function buildEnvironment(cfg: ResolvedConfig): string {
+function buildEnvironment(cfg: ResolvedConfig, callerContext?: string): string {
   const lines = [`<time>${new Date().toString()}</time>`];
 
   if (cfg.pinned.length > 0) {
@@ -177,6 +177,10 @@ function buildEnvironment(cfg: ResolvedConfig): string {
   const hubs = cfg.hubs.map((h) => h.name);
   if (hubs.length > 0) {
     lines.push(`<hubs>${hubs.join(", ")}</hubs>`);
+  }
+
+  if (callerContext) {
+    lines.push(`<context>${callerContext}</context>`);
   }
 
   return lines.join("\n");
