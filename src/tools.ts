@@ -241,7 +241,11 @@ export function runToolDef(commands: Record<string, string>): ToolDef {
     '  boolean: --flag (no value = true)',
     '  object:  --properties {"name": "x", "tags": ["a"]}  (JSON without quotes, braces auto-matched)',
     '  array:   --tags ["a", "b"]  (JSON array without quotes)',
-    '  multi-line text: use stdin parameter for long/multi-line content (markdown, body text, etc.)',
+    '',
+    'Escaping (bash-like double quotes):',
+    '  \\\\ → literal backslash, \\n → newline',
+    '  LaTeX: --back "$$\\\\text{Revenue}$$"  →  $$\\text{Revenue}$$',
+    '  Multi-line: --body "line1\\nline2"  or use stdin parameter for long content',
     '',
     'Available commands:',
     ...Object.entries(commands)
@@ -883,6 +887,22 @@ function buildClipInvokeInput(args: string[], stdin: string): unknown {
   return {};
 }
 
+function unescapeString(s: string): string {
+  if (!s.includes('\\')) return s;
+  let result = '';
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] === '\\' && i + 1 < s.length) {
+      const next = s[i + 1];
+      if (next === 'n') { result += '\n'; i++; }
+      else if (next === '\\') { result += '\\'; i++; }
+      else { result += '\\'; }
+    } else {
+      result += s[i];
+    }
+  }
+  return result;
+}
+
 function parseScalar(value: string): unknown {
   if (value === 'true') {
     return true;
@@ -905,7 +925,7 @@ function parseScalar(value: string): unknown {
     }
   }
 
-  return value;
+  return unescapeString(value);
 }
 
 function formatSummaryTime(unix: number): string {
