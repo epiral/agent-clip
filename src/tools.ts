@@ -913,7 +913,10 @@ function parseScalar(value: string): unknown {
 
   const asNumber = Number(value);
   if (Number.isFinite(asNumber) && value.trim() !== '') {
-    return asNumber;
+    if (!Number.isInteger(asNumber) || Number.isSafeInteger(asNumber)) {
+      return asNumber;
+    }
+    return value;
   }
 
   // Try JSON object or array
