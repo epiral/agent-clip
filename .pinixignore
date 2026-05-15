@@ -6,4 +6,3 @@ bun.lock
 .DS_Store
 *.md
 *.test.ts
-seed
