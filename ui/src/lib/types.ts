@@ -11,6 +11,7 @@ export interface Agent {
   pinned: string[] | null;
   created_at: number;
   updated_at: number;
+  topic_count?: number;
 }
 
 export interface CreateAgentInput {
@@ -74,6 +75,7 @@ export interface HistoryMessage {
   tool_calls?: { name: string; arguments: string }[];
   attachments?: { name: string; url: string; is_image: boolean }[];
   usage?: TokenUsage;
+  run_id?: string;
 }
 
 // ─── Block-based message model (supports interleaved thinking/tool/text) ───
@@ -91,4 +93,5 @@ export interface ChatMessage {
   role: "user" | "assistant";
   blocks: MessageBlock[];
   status: "done" | "streaming" | "error";
+  run_id?: string;
 }

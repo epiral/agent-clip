@@ -1,48 +1,65 @@
 /**
  * Agent service — all business logic for UI consumption.
  *
- * Every method maps to a backend command.
+ * Uses resource-oriented commands (topic list, run get, etc.)
+ * with unified { data: T } / { data: T[], has_more, cursor? } envelopes.
+ *
  * UI components should ONLY call functions from this module.
  */
 
 import { invoke, invokeStream, type StreamEvent } from "@pinixai/core/web";
 import type { Agent, CreateAgentInput, Topic, Run, SendOptions, HistoryMessage, TokenUsage } from "./types";
 
+// ─── Envelope helpers ───
+
+/** Unwrap { data: T } envelope from resource-oriented commands */
+async function cmd<T>(command: string, params?: Record<string, unknown>): Promise<T> {
+  const result = await invoke<{ data: T }>(command, params);
+  return result.data;
+}
+
+/** Invoke a list command and return { data, has_more, cursor? } */
+async function cmdList<T>(command: string, params?: Record<string, unknown>): Promise<{ data: T[]; has_more: boolean; cursor?: string }> {
+  return invoke<{ data: T[]; has_more: boolean; cursor?: string }>(command, params);
+}
+
 // ─── Agents ───
 
 export async function listAgents(): Promise<Agent[]> {
-  return invoke<Agent[]>("agent", { args: ["list"] });
+  return cmd<Agent[]>("agent list");
 }
 
 export async function createAgent(input: CreateAgentInput): Promise<Agent> {
-  const args: string[] = ["create", "--name", input.name];
-  if (input.llm_model) args.push("--model", input.llm_model);
-  if (input.llm_provider) args.push("--provider", input.llm_provider);
-  if (input.max_tokens) args.push("--max-tokens", String(input.max_tokens));
-  if (input.system_prompt) args.push("--system-prompt", input.system_prompt);
-  if (input.scope?.length) args.push("--scope", input.scope.join(","));
-  if (input.pinned?.length) args.push("--pinned", input.pinned.join(","));
-  return invoke<Agent>("agent", { args });
+  return cmd<Agent>("agent create", {
+    name: input.name,
+    llm_model: input.llm_model,
+    llm_provider: input.llm_provider,
+    max_tokens: input.max_tokens,
+    system_prompt: input.system_prompt,
+    scope: input.scope?.join(","),
+    pinned: input.pinned?.join(","),
+  });
 }
 
 export async function getAgent(id: string): Promise<Agent> {
-  return invoke<Agent>("agent", { args: ["get", id] });
+  return cmd<Agent>("agent get", { args: [id] });
 }
 
 export async function updateAgent(id: string, updates: Partial<CreateAgentInput>): Promise<Agent> {
-  const args: string[] = ["update", id];
-  if (updates.name) args.push("--name", updates.name);
-  if (updates.llm_model !== undefined) args.push("--model", updates.llm_model || "");
-  if (updates.llm_provider !== undefined) args.push("--provider", updates.llm_provider || "");
-  if (updates.max_tokens !== undefined) args.push("--max-tokens", String(updates.max_tokens || 0));
-  if (updates.system_prompt !== undefined) args.push("--system-prompt", updates.system_prompt || "");
-  if (updates.scope !== undefined) args.push("--scope", updates.scope?.join(",") || "");
-  if (updates.pinned !== undefined) args.push("--pinned", updates.pinned?.join(",") || "");
-  return invoke<Agent>("agent", { args });
+  return cmd<Agent>("agent update", {
+    args: [id],
+    name: updates.name,
+    llm_model: updates.llm_model,
+    llm_provider: updates.llm_provider,
+    max_tokens: updates.max_tokens,
+    system_prompt: updates.system_prompt,
+    scope: updates.scope?.join(","),
+    pinned: updates.pinned?.join(","),
+  });
 }
 
 export async function deleteAgent(id: string): Promise<void> {
-  await invoke("agent", { args: ["delete", id] });
+  await invoke("agent delete", { args: [id] });
 }
 
 // ─── Clips ───
@@ -51,27 +68,45 @@ export interface ClipInfo {
   name: string;
   package: string;
   version: string;
-  domain: string;
   commands: string[];
 }
 
 export async function listClips(): Promise<ClipInfo[]> {
-  return invoke<ClipInfo[]>("list-clips");
+  return cmd<ClipInfo[]>("clip list");
 }
 
 // ─── Topics ───
 
-export async function listTopics(): Promise<Topic[]> {
-  return invoke<Topic[]>("list-topics");
+export interface TopicListResult {
+  topics: Topic[];
+  has_more: boolean;
+  cursor?: string;
+}
+
+export async function listTopics(limit = 20, cursor?: string): Promise<TopicListResult> {
+  const params: Record<string, unknown> = { limit };
+  if (cursor) params.cursor = cursor;
+  const result = await cmdList<Topic>("topic list", params);
+  return { topics: result.data, has_more: result.has_more, cursor: result.cursor };
 }
 
 export async function createTopic(name: string, agentId?: string): Promise<Topic> {
-  const args: string[] = ["-n", name];
-  if (agentId) args.push("--agent", agentId);
-  return invoke<Topic>("create-topic", { args });
+  const params: Record<string, unknown> = { name };
+  if (agentId) params.agent_id = agentId;
+  return cmd<Topic>("topic create", params);
+}
+
+export interface TopicDetail {
+  id: string;
+  name: string;
+  agent_id: string | null;
+  forked_from_topic_id?: string | null;
+  forked_from_run_id?: string | null;
+  created_at: number;
 }
 
 export interface TopicResponse {
+  topic: TopicDetail;
   agent: { id: string; name: string; llm_model: string | null } | null;
   messages: HistoryMessage[];
   active_run: {
@@ -81,18 +116,38 @@ export interface TopicResponse {
     async: boolean;
     output?: string;
   } | null;
-  has_more: boolean;
-  oldest_id: number | null;
 }
 
-export async function getTopicData(topicId: string, before?: number): Promise<TopicResponse> {
-  const args = [topicId];
-  if (before) args.push("--before", String(before));
-  return invoke<TopicResponse>("get-topic", { args });
+export interface TopicGetResult {
+  data: TopicResponse;
+  has_more: boolean;
+  cursor?: string;
+}
+
+export async function getTopicData(topicId: string, cursor?: string): Promise<TopicGetResult> {
+  const params: Record<string, unknown> = { args: [topicId] };
+  if (cursor) params.cursor = cursor;
+  return invoke<TopicGetResult>("topic get", params);
 }
 
 export async function deleteTopic(topicId: string): Promise<void> {
-  await invoke("delete-topic", { args: [topicId] });
+  await invoke("topic delete", { args: [topicId] });
+}
+
+export interface ForkResult {
+  id: string;
+  name: string;
+  agent_id: string | null;
+  forked_from_topic_id: string | null;
+  forked_from_run_id: string | null;
+  created_at: number;
+}
+
+export async function forkTopic(topicId: string, runId?: string, name?: string): Promise<ForkResult> {
+  const params: Record<string, unknown> = { args: [topicId] };
+  if (runId) params.run_id = runId;
+  if (name) params.name = name;
+  return cmd<ForkResult>("topic fork", params);
 }
 
 // ─── Upload ───
@@ -100,6 +155,7 @@ export async function deleteTopic(topicId: string): Promise<void> {
 export interface UploadResult {
   path: string;
   size: number;
+  topic_id: string;
 }
 
 export async function upload(
@@ -107,7 +163,7 @@ export async function upload(
   topicId: string,
 ): Promise<UploadResult> {
   const data = await fileToBase64(file);
-  return invoke<UploadResult>("upload", {
+  return cmd<UploadResult>("attachment upload", {
     stdin: JSON.stringify({
       name: file.name,
       mime: file.type,
@@ -122,7 +178,6 @@ function fileToBase64(file: File): Promise<string> {
     const reader = new FileReader();
     reader.onload = () => {
       const result = reader.result as string;
-      // Strip data:...;base64, prefix
       resolve(result.split(",")[1]);
     };
     reader.onerror = reject;
@@ -162,7 +217,7 @@ export function send(
       attachments: options.attachments,
     });
     return invokeStream(
-      "send",
+      "message send",
       { args: ["--output", "jsonl"], stdin },
       (event: StreamEvent) => dispatchEvent(event, callbacks),
       (exitCode: number) => {
@@ -178,7 +233,7 @@ export function send(
   if (options.async) args.push("--async");
 
   return invokeStream(
-    "send",
+    "message send",
     { args },
     (event: StreamEvent) => dispatchEvent(event, callbacks),
     (exitCode: number) => {
@@ -210,7 +265,6 @@ function dispatchEvent(event: StreamEvent, callbacks: SendCallbacks) {
       callbacks.onDone?.();
       break;
     default: {
-      // Extension events (pass through core's open runtime filter)
       const raw = event as unknown as Record<string, unknown>;
       if (raw.type === "usage") {
         callbacks.onUsage?.(raw as unknown as TokenUsage);
@@ -223,11 +277,11 @@ function dispatchEvent(event: StreamEvent, callbacks: SendCallbacks) {
 // ─── Runs ───
 
 export async function getRun(runId: string): Promise<Run> {
-  return invoke<Run>("get-run", { args: [runId] });
+  return cmd<Run>("run get", { args: [runId] });
 }
 
 export async function cancelRun(runId: string): Promise<void> {
-  await invoke("cancel-run", { args: [runId] });
+  await invoke("run cancel", { args: [runId] });
 }
 
 // ─── Config ───
@@ -235,7 +289,7 @@ export async function cancelRun(runId: string): Promise<void> {
 export interface ProviderInfo {
   protocol: string;
   base_url: string;
-  api_key: string; // masked
+  api_key: string;
 }
 
 export interface AgentConfig {
@@ -249,15 +303,15 @@ export interface AgentConfig {
 }
 
 export async function getConfig(): Promise<AgentConfig> {
-  return invoke<AgentConfig>("config");
+  return cmd<AgentConfig>("config get");
 }
 
 export async function setConfig(key: string, value: string): Promise<void> {
-  await invoke("config", { args: ["set", key, value] });
+  await invoke("config set", { args: [key, value] });
 }
 
 export async function deleteConfig(key: string): Promise<void> {
-  await invoke("config", { args: ["delete", key] });
+  await invoke("config delete", { args: [key] });
 }
 
 export function isConfigReady(config: AgentConfig): boolean {

@@ -62,7 +62,7 @@ function historyToChatMessages(history: HistoryMessage[]): ChatMessage[] {
       });
     } else if (msg.role === "assistant") {
       if (!currentAssistant) {
-        currentAssistant = { id: nextId(), role: "assistant", blocks: [], status: "done" };
+        currentAssistant = { id: nextId(), role: "assistant", blocks: [], status: "done", run_id: msg.run_id };
       }
       if (msg.reasoning) {
         currentAssistant.blocks.push({ type: "thinking", content: msg.reasoning });
@@ -117,13 +117,13 @@ export function useChat() {
   const messageCacheRef = useRef<Map<string, ChatMessage[]>>(new Map());
   // Active stream state (survives topic switches)
   const streamRef = useRef<StreamState | null>(null);
-  // Pagination cursor: oldest message ID in current loaded set
-  const oldestIdRef = useRef<number | null>(null);
+  // Pagination cursor for messages (opaque string from backend)
+  const cursorRef = useRef<string | null>(null);
 
   const loadTopics = useCallback(async () => {
     try {
-      const list = await agent.listTopics();
-      setTopics(list);
+      const result = await agent.listTopics();
+      setTopics(result.topics);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -144,7 +144,7 @@ export function useChat() {
     if (!topicId) {
       setMessages([]);
       setIsStreaming(false);
-      oldestIdRef.current = null;
+      cursorRef.current = null;
       return;
     }
 
@@ -162,10 +162,11 @@ export function useChat() {
 
     // Load from backend
     try {
-      const data = await agent.getTopicData(topicId);
-      oldestIdRef.current = data.oldest_id;
-      setHasMore(data.has_more);
-      const chatMsgs = historyToChatMessages(data.messages);
+      const result = await agent.getTopicData(topicId);
+      cursorRef.current = result.cursor ?? null;
+      setHasMore(result.has_more);
+      const chatMsgs = historyToChatMessages(result.data.messages);
+      const data = result.data;
 
       // If there's an active run, show indicator
       if (data.active_run) {
@@ -204,18 +205,17 @@ export function useChat() {
 
   // ─── Load more (older messages) ───
   const loadMore = useCallback(async () => {
-    if (!currentTopicId || !oldestIdRef.current || isLoadingMore || !hasMore) return;
+    if (!currentTopicId || !cursorRef.current || isLoadingMore || !hasMore) return;
     setIsLoadingMore(true);
     try {
-      const data = await agent.getTopicData(currentTopicId, oldestIdRef.current);
-      if (data.messages.length === 0) {
+      const result = await agent.getTopicData(currentTopicId, cursorRef.current);
+      if (result.data.messages.length === 0) {
         setHasMore(false);
         return;
       }
-      oldestIdRef.current = data.oldest_id;
-      setHasMore(data.has_more);
-      // Convert only the new page — existing messages keep their IDs (stable React keys)
-      const olderMsgs = historyToChatMessages(data.messages);
+      cursorRef.current = result.cursor ?? null;
+      setHasMore(result.has_more);
+      const olderMsgs = historyToChatMessages(result.data.messages);
       setMessages((prev) => [...olderMsgs, ...prev]);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -396,6 +396,20 @@ export function useChat() {
     };
   }, [currentTopicId, loadTopics]);
 
+  // ─── Fork topic ───
+  const forkTopic = useCallback(async (topicId: string, runId?: string) => {
+    try {
+      const result = await agent.forkTopic(topicId, runId);
+      await loadTopics();
+      setCurrentTopicId(result.id);
+      messageCacheRef.current.delete(result.id);
+      setMessages([]);
+      setScrollToBottomTrigger((n) => n + 1);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }, [loadTopics]);
+
   // ─── Delete topic ───
   const removeTopic = useCallback(async (topicId: string) => {
     try {
@@ -439,6 +453,7 @@ export function useChat() {
     send,
     cancel,
     removeTopic,
+    forkTopic,
     loadMore,
   };
 }
