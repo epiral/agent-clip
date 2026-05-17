@@ -95,3 +95,7 @@ CREATE TABLE IF NOT EXISTS events (
 
 CREATE INDEX IF NOT EXISTS idx_events_due ON events(status, next_run_at);
 CREATE INDEX IF NOT EXISTS idx_events_topic_status ON events(topic_id, status);
+
+-- Indexes for resource-oriented queries (#21)
+CREATE INDEX IF NOT EXISTS idx_topics_agent ON topics(agent_id);
+CREATE INDEX IF NOT EXISTS idx_runs_status_started ON runs(status, started_at);
