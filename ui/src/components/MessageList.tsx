@@ -14,6 +14,7 @@ interface MessageListProps {
   isLoadingMore?: boolean;
   onLoadMore?: () => void;
   scrollToBottomTrigger?: number;
+  onForkTopic?: (runId: string) => void;
 }
 
 export interface MessageListHandle {
@@ -21,7 +22,7 @@ export interface MessageListHandle {
   showScrollButton: boolean;
 }
 
-export const MessageList = forwardRef<MessageListHandle, MessageListProps>(function MessageList({ messages, isStreaming, onSendPrompt, agentName, onScrollButtonChange, hasMore, isLoadingMore, onLoadMore, scrollToBottomTrigger }, ref) {
+export const MessageList = forwardRef<MessageListHandle, MessageListProps>(function MessageList({ messages, isStreaming, onSendPrompt, agentName, onScrollButtonChange, hasMore, isLoadingMore, onLoadMore, scrollToBottomTrigger, onForkTopic }, ref) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [userHasScrolledUp, setUserHasScrolledUp] = useState(false);
@@ -60,14 +61,16 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(funct
       onScrollButtonChange?.(false);
     }
 
-    // Load more when scrolled near top
-    if (scrollTop < 100 && hasMore && !isLoadingMore && onLoadMore) {
+    // Load more when scrolled near top (skip during prepend restoration)
+    if (scrollTop < 100 && hasMore && !isLoadingMore && !isPrependingRef.current && onLoadMore) {
       onLoadMore();
     }
   };
 
   // Auto-scroll when streaming if user hasn't scrolled up
+  // Skip during loadMore prepend to avoid jumping to bottom
   useEffect(() => {
+    if (isPrependingRef.current) return;
     if (isStreaming && !userHasScrolledUp) {
       const timeout = setTimeout(() => {
         if (scrollRef.current) {
@@ -83,23 +86,33 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(funct
   }, [messages, isStreaming, userHasScrolledUp]);
 
   // Preserve scroll position when prepending older messages
-  const prevScrollHeightRef = useRef(0);
+  const prevScrollRef = useRef<{ height: number; top: number } | null>(null);
+  const isPrependingRef = useRef(false);
 
-  // Capture scrollHeight before DOM update when loading more
+  // Snapshot scroll state BEFORE loadMore triggers a state update.
+  // Called from useChat's loadMore via a pre-update snapshot.
+  // We capture in the scroll handler + isLoadingMore transition.
   useEffect(() => {
-    if (isLoadingMore && scrollRef.current) {
-      prevScrollHeightRef.current = scrollRef.current.scrollHeight;
+    if (isLoadingMore && scrollRef.current && !prevScrollRef.current) {
+      prevScrollRef.current = {
+        height: scrollRef.current.scrollHeight,
+        top: scrollRef.current.scrollTop,
+      };
+      isPrependingRef.current = true;
     }
   }, [isLoadingMore]);
 
-  // After prepend render: restore scroll position
+  // After prepend render: restore scroll position so the user stays at the same visual point
   useLayoutEffect(() => {
+    if (!isPrependingRef.current) return;
     const el = scrollRef.current;
-    const prevHeight = prevScrollHeightRef.current;
-    if (el && prevHeight > 0 && el.scrollHeight > prevHeight) {
-      el.scrollTop += el.scrollHeight - prevHeight;
-      prevScrollHeightRef.current = 0;
+    const prev = prevScrollRef.current;
+    if (el && prev && el.scrollHeight > prev.height) {
+      const delta = el.scrollHeight - prev.height;
+      el.scrollTop = prev.top + delta;
     }
+    prevScrollRef.current = null;
+    isPrependingRef.current = false;
   }, [messages]);
 
   // Scroll to bottom only on explicit trigger (topic change)
@@ -179,7 +192,7 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(funct
             </div>
           )}
           {messages.map((msg) => (
-            <MessageBubble key={msg.id} message={msg} agentName={agentName} />
+            <MessageBubble key={msg.id} message={msg} agentName={agentName} onForkTopic={onForkTopic} />
           ))}
         </div>
       </div>
