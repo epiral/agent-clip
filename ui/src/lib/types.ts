@@ -66,7 +66,7 @@ export interface TokenUsage {
   cached_tokens?: number;
 }
 
-/** Raw message from backend get-topic */
+/** Raw message from backend topic get */
 export interface HistoryMessage {
   role: "user" | "assistant" | "system" | "tool";
   content: string;

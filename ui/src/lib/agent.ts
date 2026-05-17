@@ -90,10 +90,10 @@ export async function listTopics(limit = 20, cursor?: string): Promise<TopicList
   return { topics: result.data, has_more: result.has_more, cursor: result.cursor };
 }
 
-export async function createTopic(name: string, agentId?: string): Promise<Topic> {
+export async function createTopic(name: string, agentId?: string): Promise<TopicDetail> {
   const params: Record<string, unknown> = { name };
   if (agentId) params.agent_id = agentId;
-  return cmd<Topic>("topic create", params);
+  return cmd<TopicDetail>("topic create", params);
 }
 
 export interface TopicDetail {
