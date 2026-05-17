@@ -1,0 +1,143 @@
+@startuml resource-model
+' ============================================================
+'  Agent Clip — Resource Model
+'  2026-05-17
+' ============================================================
+
+title Agent Clip — 资源关系图
+
+skinparam linetype ortho
+skinparam classAttributeIconSize 0
+skinparam class {
+  BackgroundColor<<core>> #E3F2FD
+  BackgroundColor<<auxiliary>> #FFF9C4
+  BackgroundColor<<config>> #E8F5E9
+  BackgroundColor<<runtime>> #F3E5F5
+  BorderColor #455A64
+  FontSize 13
+}
+
+' ── 核心层 ──────────────────────────────────
+
+package "Core" {
+  class Agent <<core>> {
+    id : TEXT PK
+    name : TEXT
+    llm_provider : TEXT?
+    llm_model : TEXT?
+    max_tokens : INT?
+    system_prompt : TEXT?
+    scope : TEXT[] (JSON)
+    pinned : TEXT[] (JSON)
+    created_at / updated_at : INT
+  }
+
+  class Topic <<core>> {
+    id : TEXT PK
+    name : TEXT
+    agent_id : TEXT? FK
+    forked_from_topic_id : TEXT? FK
+    forked_from_run_id : TEXT? FK
+    created_at : INT
+  }
+
+  class Run <<core>> {
+    id : TEXT PK
+    topic_id : TEXT FK
+    status : running|done|error|cancelled
+    pid : INT
+    async : BOOL
+    started_at : INT
+    finished_at : INT?
+  }
+
+  class Message <<core>> {
+    id : INT PK AUTO
+    topic_id : TEXT FK
+    run_id : TEXT? FK
+    role : user|assistant|tool|system
+    content : TEXT?
+    tool_calls : JSON?
+    tool_call_id : TEXT?
+    reasoning : TEXT?
+    usage : JSON?
+    created_at : INT
+  }
+}
+
+' ── 辅助层 ──────────────────────────────────
+
+package "Auxiliary" {
+  class Summary <<auxiliary>> {
+    id : INT PK AUTO
+    topic_id : TEXT FK
+    run_id : TEXT? FK
+    summary : TEXT
+    user_message : TEXT
+    embedding : BLOB float32[1536]
+    embedding_model : TEXT?
+    created_at : INT
+    ..
+    summaries_fts (FTS5)
+    summaries_vec (vec0)
+  }
+
+  class Event <<auxiliary>> {
+    id : TEXT PK
+    topic_id : TEXT FK
+    prompt : TEXT
+    schedule_kind : once|daily
+    schedule_value : TEXT
+    timezone : TEXT
+    next_run_at : INT
+    last_run_at : INT?
+    status : scheduled|canceled|done
+    created_at : INT
+  }
+
+  class RunInbox <<auxiliary>> {
+    id : INT PK AUTO
+    run_id : TEXT FK
+    message : TEXT
+    ..
+    transient queue
+  }
+}
+
+' ── 配置层 ──────────────────────────────────
+
+package "Config" {
+  class "Config (YAML)" as Config <<config>> {
+    name : string
+    llm_provider / llm_model : string
+    max_tokens : number?
+    system_prompt : string
+    pinned : string[]
+    providers : Map<ProviderConfig>
+    hubs : HubConfig[]
+  }
+
+  class Clip <<runtime>> {
+    name : string
+    package : string
+    version : string
+    commands : Command[]
+    ..
+    runtime discovery (IPC)
+  }
+}
+
+' ── 关系 ────────────────────────────────────
+
+Agent  "1" --> "0..*" Topic       : owns
+Topic  "1" --> "0..*" Message     : contains
+Topic  "1" --> "0..*" Run         : executes
+Topic  "1" --> "0..*" Summary     : remembers
+Topic  "1" --> "0..*" Event       : schedules
+Topic "0..1" <.. Topic            : forked_from
+
+Run    "1" --> "0..*" Message     : produces
+Run    "1" --> "0..1" Summary     : summarized_by
+Run    "1" --> "0..*" RunInbox    : receives
+
+@enduml
